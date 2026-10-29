@@ -1,0 +1,116 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "eus.bihurri.kora",
+    "module": "kora-wear-protocol",
+    "version": "1.2.1",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "9.8.1"
+    }
+  },
+  "variants": [
+    {
+      "name": "apiElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.jvm.version": 17,
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "eus.bihurri.kora",
+          "module": "kora-core",
+          "version": {
+            "requires": "1.2.1"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.4.21"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "kora-wear-protocol-1.2.1.jar",
+          "url": "kora-wear-protocol-1.2.1.jar",
+          "size": 182598,
+          "sha512": "93bf4a43d312858e1f76c178858683a486f43434687e2d6367920b8046f3c0608fe5c0506718d094d395ddb3daf0f46c246bb1e26489e9f30e099e3125143938",
+          "sha256": "840d03e591fa88be474c063235c9792439c28d67d7d6886bc2e9d73a88a4a01e",
+          "sha1": "05d65d25abb36c8856ccd5e68ff1c786ab60a9be",
+          "md5": "8a16eaf1cc1a5d4e317f1e184a08aba6"
+        }
+      ]
+    },
+    {
+      "name": "runtimeElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.jvm.version": 17,
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "eus.bihurri.kora",
+          "module": "kora-core",
+          "version": {
+            "requires": "1.2.1"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.4.21"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "kora-wear-protocol-1.2.1.jar",
+          "url": "kora-wear-protocol-1.2.1.jar",
+          "size": 182598,
+          "sha512": "93bf4a43d312858e1f76c178858683a486f43434687e2d6367920b8046f3c0608fe5c0506718d094d395ddb3daf0f46c246bb1e26489e9f30e099e3125143938",
+          "sha256": "840d03e591fa88be474c063235c9792439c28d67d7d6886bc2e9d73a88a4a01e",
+          "sha1": "05d65d25abb36c8856ccd5e68ff1c786ab60a9be",
+          "md5": "8a16eaf1cc1a5d4e317f1e184a08aba6"
+        }
+      ]
+    },
+    {
+      "name": "sourcesElements",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "kora-wear-protocol-1.2.1-sources.jar",
+          "url": "kora-wear-protocol-1.2.1-sources.jar",
+          "size": 17997,
+          "sha512": "45d59c8ad6a3c0f724b1d72e65cafd40ce999e9b078939b73feec7275c5af635dcaf8b6775683e83c6aa6aa1c5b96a6d8e5f23e7cc288874478ffa9f79c87783",
+          "sha256": "5c37b10e073615a963f1c0b6af51a6c286a3969968cf41c4aa3330120a918c9a",
+          "sha1": "91356a6ee673aa28e14a7acb995293d9e31a50f6",
+          "md5": "271f710ade93a16b977ae3af666e8173"
+        }
+      ]
+    }
+  ]
+}

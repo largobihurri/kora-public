@@ -1,0 +1,116 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "eus.bihurri.kora",
+    "module": "kora-mcp",
+    "version": "1.2.1",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "9.8.1"
+    }
+  },
+  "variants": [
+    {
+      "name": "apiElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.jvm.version": 17,
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "eus.bihurri.kora",
+          "module": "kora-core",
+          "version": {
+            "requires": "1.2.1"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.4.21"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "kora-mcp-1.2.1.jar",
+          "url": "kora-mcp-1.2.1.jar",
+          "size": 101393,
+          "sha512": "3da6beabccb2869442923679f0c5f386128dd1a3b51fac33a79bd8be27a640fa6c8dd9bb91ff67aed7c3f81d1fe922b66df4273716ae68df4a788d668dfd746f",
+          "sha256": "a7a9b287c1f16c74df3b8378725b17bbecf53f7b17f22e2d00d00b3f9ac81f35",
+          "sha1": "25279f3954c00a368c4f07d5ec40b33f887fae43",
+          "md5": "5ebde26863028f1bb5b9d1c538ac1bbb"
+        }
+      ]
+    },
+    {
+      "name": "runtimeElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.jvm.version": 17,
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "eus.bihurri.kora",
+          "module": "kora-core",
+          "version": {
+            "requires": "1.2.1"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.4.21"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "kora-mcp-1.2.1.jar",
+          "url": "kora-mcp-1.2.1.jar",
+          "size": 101393,
+          "sha512": "3da6beabccb2869442923679f0c5f386128dd1a3b51fac33a79bd8be27a640fa6c8dd9bb91ff67aed7c3f81d1fe922b66df4273716ae68df4a788d668dfd746f",
+          "sha256": "a7a9b287c1f16c74df3b8378725b17bbecf53f7b17f22e2d00d00b3f9ac81f35",
+          "sha1": "25279f3954c00a368c4f07d5ec40b33f887fae43",
+          "md5": "5ebde26863028f1bb5b9d1c538ac1bbb"
+        }
+      ]
+    },
+    {
+      "name": "sourcesElements",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "kora-mcp-1.2.1-sources.jar",
+          "url": "kora-mcp-1.2.1-sources.jar",
+          "size": 15431,
+          "sha512": "517543b979e2af339954cccf1589a4ffefdd12336423733b8ec5dda9372d9faa78ad627ef13d9e529fda3d3a67787bcaced9b3a559c7fa80abb73f5355a1d23a",
+          "sha256": "f75b1a9ecdc78d0f2903003d5059b5569145182934038928808b8836108831e7",
+          "sha1": "e4a1f2c0715fc8c45c0bf93cf5c9da4c663d1a3b",
+          "md5": "c403c838b2656007aaadf507548b6510"
+        }
+      ]
+    }
+  ]
+}

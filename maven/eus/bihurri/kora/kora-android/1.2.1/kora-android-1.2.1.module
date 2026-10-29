@@ -1,0 +1,117 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "eus.bihurri.kora",
+    "module": "kora-android",
+    "version": "1.2.1",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "9.8.1"
+    }
+  },
+  "variants": [
+    {
+      "name": "releaseVariantReleaseApiPublication",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-api"
+      },
+      "dependencies": [
+        {
+          "group": "eus.bihurri.kora",
+          "module": "kora-core",
+          "version": {
+            "requires": "1.2.1"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.4.21"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "kora-android-1.2.1.aar",
+          "url": "kora-android-1.2.1.aar",
+          "size": 155565,
+          "sha512": "a224cd1a892c68bdf6a59ac3cb37f2e53cb7f163e2c7c3346442c29e1399ee6d73bee707b1ac1ef8cd5179d5796faa55591eb1ed63d94171837c92228b3cff61",
+          "sha256": "f972305a22b88256c853a9c971fb551a32f43ad39ebf9d3e2b5ecb0e92b1015b",
+          "sha1": "944cafa12943f483557b15d911b0081e23fbf810",
+          "md5": "056cf82bd50fdd3a855fd6414ea30d51"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseRuntimePublication",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-runtime"
+      },
+      "dependencies": [
+        {
+          "group": "eus.bihurri.kora",
+          "module": "kora-mcp",
+          "version": {
+            "requires": "1.2.1"
+          }
+        },
+        {
+          "group": "eus.bihurri.kora",
+          "module": "kora-core",
+          "version": {
+            "requires": "1.2.1"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.4.21"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "kora-android-1.2.1.aar",
+          "url": "kora-android-1.2.1.aar",
+          "size": 155565,
+          "sha512": "a224cd1a892c68bdf6a59ac3cb37f2e53cb7f163e2c7c3346442c29e1399ee6d73bee707b1ac1ef8cd5179d5796faa55591eb1ed63d94171837c92228b3cff61",
+          "sha256": "f972305a22b88256c853a9c971fb551a32f43ad39ebf9d3e2b5ecb0e92b1015b",
+          "sha1": "944cafa12943f483557b15d911b0081e23fbf810",
+          "md5": "056cf82bd50fdd3a855fd6414ea30d51"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseSourcePublication",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "kora-android-1.2.1-sources.jar",
+          "url": "kora-android-1.2.1-sources.jar",
+          "size": 37788,
+          "sha512": "8e7ab0e4ed9b8214f36a087528573a2e36b979380f7d6af5ddaeaca22aa77b96862c657495f06296bb1b6ef4076719a5fd5380cfc1e8e5069914730e5fa92e39",
+          "sha256": "c208c19ca2ab3ef74d3b06d9c61cd87d0f22ff8be583766b109aac1db09d2d37",
+          "sha1": "92fb8697f8ba3ffd17684cfb243288b713f9bb19",
+          "md5": "0ce88be448e9a67d80ebb7b78356093a"
+        }
+      ]
+    }
+  ]
+}
