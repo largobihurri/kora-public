@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Package visibility (Android 11+): lets this app see which other apps serve a Kora node. -->
+    <queries>
+        <intent>
+            <action android:name="eus.bihurri.kora.action.NODE" />
+        </intent>
+    </queries>
+
+    <application>
+        <!--
+            Exported on purpose and without a manifest permission: the caller is identified in code from the
+            Binder transaction (uid, signing certificate) and the node's caller policy decides, per scope, what
+            the app itself, signed peers, the adb shell and external apps may do.
+        -->
+        <service
+            android:name="eus.bihurri.kora.android.KoraNodeService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="eus.bihurri.kora.action.NODE" />
+            </intent-filter>
+        </service>
+
+        <!--
+            The external gate (adb, other apps, remote agents). Exported on purpose, with no manifest permission:
+            every Kora app would define the same permission, which apps signed with different keys cannot do.
+            Each call identifies the calling uid in code and the app's ExternalAccess port (master switch and
+            per-caller grants) decides. It serves call() only and exposes no data.
+        -->
+        <provider
+            android:name="eus.bihurri.kora.android.KoraGateProvider"
+            android:authorities="${applicationId}.kora"
+            android:exported="true"
+            tools:ignore="ExportedContentProvider" />
+    </application>
+</manifest>

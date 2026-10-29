@@ -1,0 +1,1 @@
+{"version":1,"epoch":1700000000123,"body":{"type":"failed","subscriptionId":"s1","error":{"code":"unauthorized","message":"Scope is not granted"}}}

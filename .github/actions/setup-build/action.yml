@@ -1,0 +1,19 @@
+name: Set up the Kora build
+description: JDK 21, Gradle and the Android SDK packages the build needs.
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+      with:
+        distribution: temurin
+        java-version: "21"
+    - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+    - name: Install Android SDK packages
+      shell: bash
+      run: |
+        # GitHub-hosted ubuntu runners ship an SDK at $ANDROID_HOME; add what compileSdk 37 needs when it is missing.
+        sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+        yes | "$sdkmanager" --licenses > /dev/null || true
+        # Since API 37 platforms are published with a minor version: `platforms;android-37.0` is compileSdk 37
+        # (`sdkmanager --list` has no `platforms;android-37`).
+        "$sdkmanager" "platforms;android-37.0" "build-tools;37.0.0"

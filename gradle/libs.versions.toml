@@ -1,0 +1,52 @@
+[versions]
+# Android SDK levels (read by the convention plugins)
+compileSdk = "37"
+minSdk = "29"
+# JDK that runs the build (toolchain) and the bytecode level every module is compiled to. The
+# bytecode level is the compatibility floor: consumers include apps that still build on Java 17.
+jdk = "21"
+jvmTarget = "17"
+
+# Build tooling
+agp = "9.4.1"
+kotlin = "2.4.21"
+
+# Libraries
+coroutines = "1.11.0"
+serialization = "1.11.0"
+# Wear OS Data Layer client; 20.0.1 is the latest release in Google Maven (maven-metadata.xml, checked 2026-10-15).
+playServicesWearable = "20.0.1"
+
+# Testing
+junit = "6.1.3"
+junit4 = "4.13.2"
+robolectric = "4.17"
+
+[libraries]
+# Build-logic dependencies (compileOnly in :build-logic:convention)
+android-gradlePlugin = { module = "com.android.tools.build:gradle", version.ref = "agp" }
+kotlin-gradlePlugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
+kotlin-serialization-gradlePlugin = { module = "org.jetbrains.kotlin:kotlin-serialization", version.ref = "kotlin" }
+
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
+kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
+kotlinx-serialization-core = { module = "org.jetbrains.kotlinx:kotlinx-serialization-core", version.ref = "serialization" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
+kotlinx-serialization-cbor = { module = "org.jetbrains.kotlinx:kotlinx-serialization-cbor", version.ref = "serialization" }
+
+play-services-wearable = { module = "com.google.android.gms:play-services-wearable", version.ref = "playServicesWearable" }
+
+# Testing
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
+junit-vintage-engine = { module = "org.junit.vintage:junit-vintage-engine", version.ref = "junit" }
+junit4 = { module = "junit:junit", version.ref = "junit4" }
+robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junit" }
+
+[plugins]
+# Declared (apply false) in the root build so that every module shares one plugin classpath;
+# modules apply them through the convention plugins in :build-logic.
+android-application = { id = "com.android.application", version.ref = "agp" }
+android-library = { id = "com.android.library", version.ref = "agp" }
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }

@@ -1,0 +1,1 @@
+{"items":[{"track":{"id":"track-1","title":"Title","artist":"Artist","album":"Album","durationMs":215000,"artworkId":"art-1"},"startedAtEpochMs":1700000000000,"playedMs":61000},{"track":{"id":"track-2","title":"Only title","artist":null,"album":null,"durationMs":0,"artworkId":null},"startedAtEpochMs":1700000001000,"playedMs":null}],"total":32,"offset":20}

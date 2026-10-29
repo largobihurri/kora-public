@@ -1,0 +1,1 @@
+{"type":"failure","id":"kardio-req-1","error":{"code":"incompatible_version","message":"'media.playback' is at 1.0, which cannot serve 1.2"}}

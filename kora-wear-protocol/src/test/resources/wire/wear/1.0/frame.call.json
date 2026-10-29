@@ -1,0 +1,1 @@
+{"version":1,"epoch":1700000000123,"body":{"type":"call","target":"sonora","request":{"id":"r1","capability":"media.library","version":{"major":1,"minor":0},"operation":"list_playlists","payload":[1,2,3]}}}

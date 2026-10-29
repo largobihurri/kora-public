@@ -1,0 +1,1 @@
+{"version":1,"epoch":1700000000123,"body":{"type":"subscribe","target":"sonora","request":{"subscriptionId":"s1","capability":"media.playback","version":{"major":1,"minor":0},"event":"now_playing_changed"}}}

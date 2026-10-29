@@ -1,0 +1,1 @@
+{"version":1,"epoch":1700000000123,"body":{"type":"event","event":{"subscriptionId":"s1","capability":"media.playback","event":"now_playing_changed","payload":[7]}}}

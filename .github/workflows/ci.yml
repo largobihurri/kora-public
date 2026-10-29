@@ -1,0 +1,22 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # Pinned: ubuntu-latest moves to Ubuntu 26 on 2026-10-19, and the Android SDK step must stay predictable.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-build
+      - name: Test the release tag check
+        run: .github/scripts/check-release-tag.test.sh
+      - name: Build and test
+        run: ./gradlew build

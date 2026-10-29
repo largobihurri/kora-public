@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <application>
+        <!--
+            Receives the relay's Data Layer messages, starting the app if it is not running. Google Play services
+            binds to it, hence exported; only messages on /kora/v1 reach it, and the Data Layer only delivers
+            messages between apps with the same package name and signing certificate. It is not woken by
+            capability changes or data items.
+        -->
+        <service
+            android:name="eus.bihurri.kora.wear.KoraWearListenerService"
+            android:exported="true"
+            tools:ignore="ExportedService">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+                <data
+                    android:scheme="wear"
+                    android:host="*"
+                    android:pathPrefix="/kora/v1" />
+            </intent-filter>
+        </service>
+    </application>
+</manifest>

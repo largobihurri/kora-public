@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
+    <application>
+        <!--
+            Hosts the MCP listener while the app's "agent access" switch is on. Not exported: only the app (and its own
+            notification action) starts it. specialUse because no other foreground service type describes serving a
+            local network endpoint to the owner's agents (see the module README).
+        -->
+        <service
+            android:name="eus.bihurri.kora.tailnet.TailnetService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Serves the app's Kora capabilities over MCP on the device's Tailscale address, only while the user's agent-access switch is on and until it idles out, so that the user's own agents can use the app without a cable." />
+        </service>
+
+        <!-- The idle deadline of the session, as an alarm that fires while the device sleeps. Not exported. -->
+        <receiver
+            android:name="eus.bihurri.kora.tailnet.TailnetIdleReceiver"
+            android:exported="false" />
+    </application>
+</manifest>

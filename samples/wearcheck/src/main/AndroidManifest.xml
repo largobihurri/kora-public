@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- No uses-feature for the watch hardware type: the same APK must install on a phone and on a Wear OS watch. -->
+    <application
+        android:name=".WearCheckApp"
+        android:allowBackup="false"
+        android:label="Kora wear check">
+        <!-- Lets the app live on a watch that has no paired phone app from a store. -->
+        <meta-data
+            android:name="com.google.android.wearable.standalone"
+            android:value="true" />
+
+        <!--
+            Exported on purpose: the launcher and `adb shell am start` start it from another uid, which Android refuses for a
+            non-exported activity. It only runs read-only calls against this sample's stub data.
+        -->
+        <activity
+            android:name=".CheckActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
