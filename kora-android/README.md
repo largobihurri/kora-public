@@ -28,6 +28,9 @@ agents. Both reach the same node and the same caller policy.
    to peers, the gate and MCP. If an app can offer only part of a feature, that part is a separate capability.
 3. Use peers through the node: `node.call(spec, input)`, `node.events(spec)`, `node.peers`,
    `node.availability(capability)`. The default target is this app, then any peer that offers the capability.
+   An operation that carries a byte stream (`files.upload`, `files.download`) is called with
+   `node.callSending(spec, input, bytes)` or `node.callReceiving(spec, input)` and provided with `onUpload` or
+   `onDownload`; see the Binder transport below.
 
 Peers can also arrive by other routes: `KoraAndroid.install(this, peerRoutes = listOf(route))` merges their directory and transport
 with the Binder ones (Binder wins on a duplicate node id). `:kora-wear` uses it to reach the paired phone or watch.
@@ -182,6 +185,31 @@ adb shell content call --uri content://eus.bihurri.kora.sample.provider.kora --m
 - Binding is lazy and shared per peer; a connection with no call or subscription in flight is unbound after
   `idleTimeout` (default 30 s). A dying peer fails in-flight calls with `provider_unavailable`; the next use reconnects.
 - Envelopes above 256 KiB are refused with `payload_too_large` (Binder transactions share ~1 MB per process).
+- Protocol: this library speaks version 2 (`KoraAndroid.PROTOCOL_VERSION`) and uses any peer from version 1 on
+  (`MIN_PEER_PROTOCOL_VERSION`), older or newer. Version 2 appends two methods for the operations that carry a byte
+  stream: `callSending(request, bytes, sizeBytes, callback)`, whose descriptor is the read end of a pipe or a file the
+  caller opened read-only, and `callReceiving(request, callback)`, answered through
+  `IKoraStreamCallback.onResponse(response, bytes, sizeBytes)`: a success with the read end of a pipe, a failure with
+  no descriptor. They are used only with a peer on version 2 or later; with an older one a stream operation is
+  `provider_unavailable` before anything is sent.
+- Byte streams: the envelopes keep the 256 KiB cap and the bytes travel outside them, through the descriptor, bounded
+  by the declared size. The receiver reads exactly that many bytes and fails a stream that ends short, or that runs over
+  once it is read to its end; an upload of the wrong size whose failure escapes the provider's handler is answered
+  `invalid_payload`. Both sides
+  close every descriptor they hold on every path, and the service closes an upload's descriptor whether or not the
+  handler read it. Downloaded bytes hold the connection to the peer until they are closed or read to the end.
+- `streamIdleTimeout` (an `install` parameter, default 10 s): a stream call is not bound by the call timeout; it fails
+  with `timeout` when neither a byte nor the answer moves for that long. That counts after the last byte of an upload
+  too, so an upload handler only stages what it received and answers; slow work comes later, and a caller that retries
+  after a `timeout` uploads again. The service allows a provider's own download bytes twice that before it drops them,
+  so that the caller's read times out first, and it stops pumping a download the caller has stopped reading after
+  `streamIdleTimeout` (the caller then reads a stream that ends short).
+- The gate carries no byte stream: `kora.call` and `kora.call.json` answer a stream operation `provider_unavailable`
+  (after the policy, so a refused caller still gets `unauthorized`), and through `kora.mcp` a stream operation is not a
+  tool, so calling its name is an unknown tool.
+- Not yet checked on a device (the JVM tests use in-memory pipes): that a descriptor passed over Binder is readable by
+  the other app, that closing a descriptor unblocks a read or write blocked on it, and what a pipe does when either
+  process dies.
 - Peer descriptors are cached per package version and refreshed on package install/update/removal.
 - `describe` is answered to any identified caller: it lists capability ids and versions only, which a caller needs before
   asking the user for access.

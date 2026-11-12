@@ -143,6 +143,10 @@ tools/publish-source/export.sh v1.2.1 <empty dir>     # the clean copy, for kora
 ./gradlew publishAllPublicationsToStagingRepository     # in that copy: build/staging-repo is the Maven tree
 ```
 
+The export refuses a ref that predates the tool (releases before 1.2.1) and an output directory that is not empty; a
+refused export writes nothing, and the internal files never reach the output directory, even when the export fails.
+`tools/publish-source/export.test.sh` tests it.
+
 The Maven tree is added under `maven/` on kora-public's `gh-pages` branch, next to the earlier versions; versions there
 are immutable too. An app reads it with:
 

@@ -60,7 +60,8 @@ private const val MAX_ECHO = 80
  * The tools are [McpTools] of the built-in capabilities the node can reach right now (provided by the node itself or
  * by a compatible peer), so the list changes when a peer joins or leaves. `tools/list` does not depend on the
  * caller: the catalogue is the same for every agent, and the caller's grants are enforced when a tool is called.
- * A tool that is known but not reachable answers `provider_unavailable` as a tool error.
+ * A tool that is known but not reachable answers `provider_unavailable` as a tool error. An operation that carries a
+ * byte stream (`files.upload`, `files.download`) is not a tool ([McpToolSet]), so calling its name is an unknown tool.
  *
  * A successful result carries the output as `structuredContent` and, in `content`, one `text` block with the same
  * JSON, except for artwork, which is an `image` block plus a metadata text ([ToolContent]).
@@ -94,8 +95,8 @@ private const val MAX_ECHO = 80
  *   `forwardToPeers`); pass your own to set timeouts or size limits, or to match a non-default node codec, and keep
  *   `forwardToPeers = true` if tools of peer capabilities should work.
  * @param pageSize tools per `tools/list` page.
- * @param tools the tools to serve, one per operation of every capability version in its registry (by default the
- *   built-in ones). Pass the same registry to [gate] if the gate must call them.
+ * @param tools the tools to serve, one per operation without a byte stream of every capability version in its
+ *   registry (by default the built-in ones). Pass the same registry to [gate] if the gate must call them.
  */
 public class McpSession(
     private val node: KoraNode,

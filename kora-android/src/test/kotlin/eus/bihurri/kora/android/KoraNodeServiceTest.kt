@@ -2,11 +2,17 @@ package eus.bihurri.kora.android
 
 import android.content.Intent
 import android.os.Binder
+import android.os.ParcelFileDescriptor
+import eus.bihurri.kora.android.ipc.IKoraCallback
+import eus.bihurri.kora.android.ipc.IKoraStreamCallback
 import eus.bihurri.kora.android.ipc.IKoraNode
 import eus.bihurri.kora.contract.CborCodec
 import eus.bihurri.kora.contract.KoraRequest
 import eus.bihurri.kora.contract.KoraResponse
 import eus.bihurri.kora.contract.NodeDescriptor
+import eus.bihurri.kora.contract.files.FileIdRequest
+import eus.bihurri.kora.contract.files.FilesCapability
+import eus.bihurri.kora.contract.files.UploadFileRequest
 import eus.bihurri.kora.contract.media.MediaPlayback
 import eus.bihurri.kora.core.KoraNode
 import eus.bihurri.kora.core.testing.provideStubbed
@@ -25,6 +31,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowBinder
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import kotlin.time.Duration.Companion.seconds
 
 /** The pieces that need a real `Service` and `Binder`: manifest wiring, binding, and the calling uid. */
 @RunWith(RobolectricTestRunner::class)
@@ -63,6 +70,18 @@ class KoraNodeServiceTest {
         assertEquals(false, visibleWhileConfiguring)
         assertEquals(listOf("media.playback"), KoraAndroid.current()?.node?.describe()?.capabilities?.map { it.id })
         assertEquals(node, KoraAndroid.node)
+    }
+
+    @Test
+    fun `install hands its streamIdleTimeout to the Binder transport and to the service`() {
+        KoraAndroid.install(RuntimeEnvironment.getApplication(), streamIdleTimeout = 3.seconds) {
+            provideStubbed(MediaPlayback) { on(MediaPlayback.Play) { } }
+        }
+        bind()
+
+        val runtime = KoraAndroid.current()!!
+        assertEquals(3.seconds, runtime.transport.streamIdleTimeout)
+        assertEquals(3.seconds, runtime.server!!.streamIdleTimeout)
     }
 
     @Test
@@ -142,5 +161,61 @@ class KoraNodeServiceTest {
         assertTrue(answered.await(5, TimeUnit.SECONDS))
         val failure = CborCodec.decode(KoraResponse.serializer(), response[0]!!) as KoraResponse.Failure
         assertEquals(eus.bihurri.kora.contract.ErrorCode.UNAUTHORIZED, failure.error.code)
+    }
+
+    /** A descriptor that records being closed, over a real (Robolectric) one. */
+    private class RecordingDescriptor(wrapped: ParcelFileDescriptor) : ParcelFileDescriptor(wrapped) {
+        @Volatile
+        var closed = false
+
+        override fun close() {
+            closed = true
+            super.close()
+        }
+    }
+
+    @Test
+    fun `stream calls from an unknown uid are refused through their callbacks and the descriptor is closed`() {
+        node()
+        val remote = bind()
+        ShadowBinder.setCallingUid(Binder.getCallingUid() + 1_234)
+        val pipe = ParcelFileDescriptor.createPipe()
+        val readEnd = RecordingDescriptor(pipe[0])
+        val upload = CborCodec.encode(
+            KoraRequest.serializer(),
+            KoraRequest("u1", FilesCapability.id.value, FilesCapability.version, FilesCapability.Upload.name, FilesCapability.Upload.encodeInput(CborCodec, UploadFileRequest("a.txt", "text/plain", 3))),
+        )
+        val download = CborCodec.encode(
+            KoraRequest.serializer(),
+            KoraRequest("d1", FilesCapability.id.value, FilesCapability.version, FilesCapability.Download.name, FilesCapability.Download.encodeInput(CborCodec, FileIdRequest("f1"))),
+        )
+        val answered = CountDownLatch(2)
+        val uploadAnswer = arrayOfNulls<ByteArray>(1)
+        val downloadAnswer = arrayOfNulls<Any>(3)
+
+        remote.callSending(upload, readEnd, 3, object : IKoraCallback.Stub() {
+            override fun onResponse(bytes: ByteArray) {
+                uploadAnswer[0] = bytes
+                answered.countDown()
+            }
+        })
+        remote.callReceiving(download, object : IKoraStreamCallback.Stub() {
+            override fun onResponse(response: ByteArray, bytes: ParcelFileDescriptor?, sizeBytes: Long) {
+                downloadAnswer[0] = response
+                downloadAnswer[1] = bytes
+                downloadAnswer[2] = sizeBytes
+                answered.countDown()
+            }
+        })
+
+        assertTrue(answered.await(5, TimeUnit.SECONDS))
+        val uploadFailure = CborCodec.decode(KoraResponse.serializer(), uploadAnswer[0]!!) as KoraResponse.Failure
+        assertEquals(eus.bihurri.kora.contract.ErrorCode.UNAUTHORIZED, uploadFailure.error.code)
+        assertTrue(readEnd.closed)
+        val downloadFailure = CborCodec.decode(KoraResponse.serializer(), downloadAnswer[0] as ByteArray) as KoraResponse.Failure
+        assertEquals(eus.bihurri.kora.contract.ErrorCode.UNAUTHORIZED, downloadFailure.error.code)
+        assertNull(downloadAnswer[1])
+        assertEquals(0L, downloadAnswer[2])
+        pipe.forEach { it.close() }
     }
 }

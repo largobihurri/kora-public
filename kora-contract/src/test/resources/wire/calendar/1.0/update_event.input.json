@@ -1,0 +1,1 @@
+{"occurrenceId":"occ-1","span":"following","title":"Dentist, second visit","start":"2026-11-24T17:00","end":"2026-11-24T17:45","allDay":false,"calendarId":"cal-1","location":"Main Street 2","rrule":"FREQ=MONTHLY;COUNT=3","alertMinutes":[30],"availability":"busy","url":"https://example.org/dentist/2","notes":"No X-rays this time."}

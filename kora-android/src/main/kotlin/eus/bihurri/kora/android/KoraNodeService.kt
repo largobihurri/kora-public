@@ -4,10 +4,12 @@ import android.app.Service
 import android.content.Intent
 import android.os.Binder
 import android.os.IBinder
+import android.os.ParcelFileDescriptor
 import android.util.Log
 import eus.bihurri.kora.android.ipc.IKoraCallback
 import eus.bihurri.kora.android.ipc.IKoraEventSink
 import eus.bihurri.kora.android.ipc.IKoraNode
+import eus.bihurri.kora.android.ipc.IKoraStreamCallback
 import eus.bihurri.kora.android.ipc.IKoraSubscription
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -24,6 +26,9 @@ import kotlinx.coroutines.cancel
  * answered `unauthorized` here. Discovery (`KoraAndroid` peer directory) lists only apps signed with our key, so
  * third parties are served when they bind but never appear as peers. The node it serves is the one created by
  * [KoraAndroid.install]; without it the service refuses to bind.
+ *
+ * It speaks [KoraAndroid.PROTOCOL_VERSION]: calls and subscriptions, and the byte streams of upload and download
+ * operations. Descriptors a caller sends are owned and closed by the server.
  */
 public class KoraNodeService : Service() {
     private var scope: CoroutineScope? = null
@@ -46,6 +51,7 @@ public class KoraNodeService : Service() {
             node = runtime.node,
             callers = CallerIdentifier(AndroidPackageInspector(this), runtime.node.nodeId),
             scope = scope,
+            streamIdleTimeout = runtime.streamIdleTimeout,
         )
         runtime.server = server
         this.scope = scope
@@ -73,6 +79,13 @@ public class KoraNodeService : Service() {
 
         override fun subscribe(request: ByteArray, sink: IKoraEventSink): IKoraSubscription =
             server.subscribe(Binder.getCallingUid(), request, sink)
+
+        // The calling uid is only valid on the Binder thread, during the transaction: read it before any hop.
+        override fun callSending(request: ByteArray, bytes: ParcelFileDescriptor?, sizeBytes: Long, callback: IKoraCallback) =
+            server.callSending(Binder.getCallingUid(), request, bytes, sizeBytes, callback)
+
+        override fun callReceiving(request: ByteArray, callback: IKoraStreamCallback) =
+            server.callReceiving(Binder.getCallingUid(), request, callback)
     }
 
     private companion object {

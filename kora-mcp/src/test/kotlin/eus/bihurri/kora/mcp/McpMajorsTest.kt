@@ -7,6 +7,7 @@ import eus.bihurri.kora.contract.CapabilityVersion
 import eus.bihurri.kora.contract.NoInput
 import eus.bihurri.kora.contract.OperationSpec
 import eus.bihurri.kora.contract.Scope
+import eus.bihurri.kora.contract.StreamDirection
 import eus.bihurri.kora.core.DefaultCallerPolicy
 import eus.bihurri.kora.core.JsonGate
 import eus.bihurri.kora.core.KoraNode
@@ -83,7 +84,12 @@ class McpMajorsTest {
     fun `the built-in tools keep their names`() {
         assertFalse(McpTools.all.any { it.name.contains("_v2") })
         assertEquals("media_library__list_playlists", McpTools.all.first().name)
-        assertEquals(eus.bihurri.kora.contract.Capabilities.all.sumOf { it.operations.size }, McpTools.all.size)
+        assertEquals(
+            eus.bihurri.kora.contract.Capabilities.all.sumOf { capability ->
+                capability.operations.count { it.stream == StreamDirection.NONE }
+            },
+            McpTools.all.size,
+        )
     }
 
     @Test

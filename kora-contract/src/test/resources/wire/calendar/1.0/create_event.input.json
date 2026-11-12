@@ -1,0 +1,1 @@
+{"title":"Dentist","start":"2026-11-10T17:30","end":"2026-11-10T18:15","allDay":false,"calendarId":"cal-1","location":"Main Street 1","rrule":"FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE","alertMinutes":[15,1440],"availability":"free","url":"https://example.org/dentist","notes":"Bring the X-rays."}

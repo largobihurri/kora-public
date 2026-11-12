@@ -5,6 +5,7 @@ import eus.bihurri.kora.contract.Capability
 import eus.bihurri.kora.contract.CapabilityId
 import eus.bihurri.kora.contract.CapabilityVersion
 import eus.bihurri.kora.contract.IntegerRange
+import eus.bihurri.kora.contract.OperationEffect
 import eus.bihurri.kora.contract.OperationSpec
 import eus.bihurri.kora.contract.Scope
 import eus.bihurri.kora.contract.TolerantEnumSerializer
@@ -143,6 +144,7 @@ public object MediaArtwork : Capability(CapabilityId("media.artwork"), Capabilit
         input = ArtworkRequest.serializer(),
         output = ArtworkImage.serializer(),
         scope = ReadScope,
+        effect = OperationEffect.READ,
         description = "Get the cover image an artworkId of a track or playlist refers to, scaled so its longer edge " +
             "is at most maxEdgePx pixels ($MIN_EDGE_PX-$MAX_EDGE_PX, default $DEFAULT_EDGE_PX) and at most " +
             "$MAX_ARTWORK_BYTES bytes.",

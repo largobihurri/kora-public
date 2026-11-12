@@ -3,6 +3,7 @@ package eus.bihurri.kora.contract.media
 import eus.bihurri.kora.contract.Capability
 import eus.bihurri.kora.contract.CapabilityId
 import eus.bihurri.kora.contract.CapabilityVersion
+import eus.bihurri.kora.contract.OperationEffect
 import eus.bihurri.kora.contract.OperationSpec
 import eus.bihurri.kora.contract.Scope
 import kotlinx.serialization.Serializable
@@ -62,6 +63,7 @@ public object MediaHistory : Capability(CapabilityId("media.history"), Capabilit
         input = PlaysRequest.serializer(),
         output = Page.serializer(PlayRecord.serializer()),
         scope = ReadScope,
+        effect = OperationEffect.READ,
         description = "List the plays that started between two instants (epoch milliseconds, both inclusive), " +
             "oldest first, one page at a time.",
     )

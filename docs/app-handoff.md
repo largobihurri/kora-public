@@ -39,8 +39,10 @@ sessions.
 
 ## Common signing key (all apps)
 
-Key: `~/.bihurri/signing/` (see `docs/signing.md`), certificate SHA-256 `47c3297e…60d2`. Kora peers trust each other
-only when they share it. Switching an installed app needs one uninstall (data loss): back up first, phone and watch
+Key: `~/.bihurri/signing/` (see `docs/signing.md`). The shared key is RSA now, certificate SHA-256
+`5f281692…c59f`; it follows the first key, an EC one with certificate SHA-256 `47c3297e…60d2`, through the EC to RSA
+signing lineage `ec-to-rsa.lineage` in the same folder (both digests are read from that lineage). Kora peers trust
+each other only when they share it. Switching an installed app needs one uninstall (data loss): back up first, phone and watch
 together.
 
 ## Agent access over the tailnet
@@ -170,6 +172,33 @@ serves it with generated images and is the reference. A proposal, for the Sonora
 - **Tests.** Unknown id -> `invalid_payload`, a large cover is scaled to `maxEdgePx` and under the cap, a small cover is
   not upscaled, the refusal without `media.artwork.read`.
 
+## Oharrak
+
+Oharrak provides the organizer vocabulary of Kora `1.3.0` (proposed, not yet released; branch
+`claude/oharrak-vocabulary-527a5d`). The design is `docs/organizer-vocabulary.md`; what the provider module needs,
+operation by operation, is `docs/organizer-handoff.md`.
+
+- Provide six capabilities at `1.0`: `reminders`, `calendar`, `notes`, `reminders.attachments`, `notes.attachments`
+  and `files`. A capability is atomic: every operation needs a handler. `calendar.attachments` is not in `1.3.0`: it
+  is designed (section 8 of the design) and arrives later as an additive capability, once Oharrak has a store for
+  the attachments of events.
+- Contract changes after Oharrak's review of 2026-11-12, to re-read: `docs/organizer-vocabulary.md` section 13,
+  "Third round", lists each with where it lives. Among them: `notes` has twelve operations, `delete_note` only moves
+  a note to Recently Deleted and `delete_note_permanently` deletes one that is there for good; every operation
+  declares an effect (`OperationSpec.effect`).
+- Recording: Oharrak's recorder is not commanded through Kora in `1.3.0`. A voice note from KOKO is KOKO's own
+  recording, uploaded with `files.upload` and attached with `notes.attachments.add` (`audio/*` is an audio
+  attachment). Commanding Oharrak's recorder is a later, additive capability whose design is redone to fit it
+  (section 10 of the design).
+- `files.upload` and `files.download` carry a byte stream: register them with `onUpload` and `onDownload`, read on
+  `Dispatchers.IO` and to the end, check `UploadFileRequest.sizeBytes` against the stream and your own limit, and
+  answer an upload within the caller's `streamIdleTimeout` of its last byte (an upload only stages the file).
+- Streams cross only Binder between apps on one phone (protocol 2). An app still on Kora `1.2` sees and calls a `1.3`
+  app for everything that carries no stream.
+- Pending on a device: a descriptor passed over Binder is readable by the other app, closing a descriptor unblocks a
+  read or write blocked on it, and a pipe behaves when either process dies. The first upload and download between
+  Oharrak and KOKO on a phone is that check.
+
 ## KOKO
 
 | Worktree | Branch | State |
@@ -177,3 +206,29 @@ serves it with generated images and is the reference. A proposal, for the Sonora
 | `KOKO-common-signing` | `feat/common-signing` (from `feat/f0-scaffold`) | Done: `63af8e5`; debug and release APKs carry the common key; tests green. |
 
 KOKO can reach Kora apps as a signed peer (once on the common key) or as an MCP client through `kora-bridge`.
+
+### Organizer vocabulary (for the KOKO session)
+
+With Kora `1.3.0`, KOKO operates Oharrak's reminders, calendar and notes through the capabilities listed under
+Oharrak, each with a `.read` and a `.write` scope; the design is `docs/organizer-vocabulary.md`.
+
+- Every operation declares its effect, `OperationSpec.effect` (`OperationEffect.READ`, `WRITE` or `DESTRUCTIVE`);
+  KOKO reads it from the spec. Every `.read` operation is `READ`. The destructive ones are
+  `reminders.delete_reminder`, `delete_list`, `delete_tag`, `calendar.delete_event`, `delete_calendar`,
+  `notes.delete_note_permanently`, `delete_folder` and `remove` of `reminders.attachments` and `notes.attachments`.
+  `notes.delete_note` is `WRITE`: it moves the note to Recently Deleted, from where `restore_note` brings it back.
+  The effect is not on the wire; MCP clients see it as the tool annotations `readOnlyHint` and `destructiveHint`.
+
+- Every operation is an MCP tool except `files.upload` and `files.download`: a model cannot hold bytes.
+- To attach a file the user gave KOKO, KOKO's own code uploads it with the typed client,
+  `node.callSending(FilesCapability.Upload, UploadFileRequest(name, mimeType, size), ByteStream(size, input))`, and
+  hands the model the answer's `fileId`, which goes into the `add` of `reminders.attachments` or
+  `notes.attachments` (events take no attachments in `1.3.0`). To read one back, `open` answers a `FileHandle` and
+  `node.callReceiving(FilesCapability.Download, FileIdRequest(fileId))` answers `WithBytes`, which KOKO closes.
+- A staged file is used by one `add`, and an `add` that fails leaves it usable; after a `timeout` KOKO reads the
+  item again to see whether the attachment is there. A handle stays valid at least 10 minutes after its last use
+  while the file exists, and belongs to the caller it was given to.
+- A voice note is KOKO's own recording: KOKO records with its own microphone, uploads the audio with `files.upload`
+  and attaches it with `notes.attachments.add`. Commanding Oharrak's recorder (`notes.recording`) is not in `1.3.0`;
+  it is a later, additive capability whose design is redone to fit Oharrak's recorder.
+- Files cross only between apps on the phone: not over MCP, not to the watch.

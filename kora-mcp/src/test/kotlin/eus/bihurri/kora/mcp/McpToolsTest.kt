@@ -1,6 +1,9 @@
 package eus.bihurri.kora.mcp
 
 import eus.bihurri.kora.contract.Capabilities
+import eus.bihurri.kora.contract.OperationEffect
+import eus.bihurri.kora.contract.StreamDirection
+import eus.bihurri.kora.contract.files.FilesCapability
 import eus.bihurri.kora.contract.media.MediaArtwork
 import eus.bihurri.kora.contract.media.MediaHistory
 import eus.bihurri.kora.contract.media.MediaLibrary
@@ -30,11 +33,20 @@ class McpToolsTest {
     private fun JsonObject.required() = this["required"]!!.jsonArray.map { it.jsonPrimitive.content }
 
     @Test
-    fun `there is one tool per operation of every built-in capability`() {
-        val operations = Capabilities.all.flatMap { it.operations }
+    fun `there is one tool per operation without a byte stream of every built-in capability`() {
+        val operations = Capabilities.all.flatMap { it.operations }.filter { it.stream == StreamDirection.NONE }
         assertEquals(operations.size, McpTools.all.size)
         assertEquals(operations.size, McpTools.all.map { it.name }.toSet().size)
         assertEquals(operations.map { McpTools.nameOf(it) }, McpTools.all.map { it.name })
+    }
+
+    @Test
+    fun `an operation that carries a byte stream is not a tool, and discard of files is one`() {
+        assertNull(McpTools.find("files__upload"))
+        assertNull(McpTools.find("files__download"))
+        assertEquals(listOf("files__discard"), McpTools.all.filter { it.capability == FilesCapability }.map { it.name })
+        assertSame(FilesCapability.Discard, tool("files__discard").operation)
+        assertTrue(McpTools.all.all { it.operation.stream == StreamDirection.NONE })
     }
 
     @Test
@@ -156,7 +168,14 @@ class McpToolsTest {
             if (expected != tool.outputSchema) changed += tool.name
         }
         assertEquals(
-            listOf("media_playback__get_state", "media_artwork__get_artwork", "fitness_session__get_active_session"),
+            listOf(
+                "media_playback__get_state", "media_artwork__get_artwork", "fitness_session__get_active_session",
+                "reminders__get_overview", "reminders__list_reminders", "reminders__get_reminder",
+                "reminders__create_reminder", "reminders__update_reminder", "reminders__complete_reminder",
+                "reminders__reopen_reminder", "reminders__snooze_reminder", "reminders__create_list",
+                "reminders__update_list", "calendar__get_event", "calendar__create_event", "calendar__update_event",
+                "notes__get_overview", "notes__update_settings",
+            ),
             changed,
         )
     }
@@ -194,7 +213,7 @@ class McpToolsTest {
     }
 
     @Test
-    fun `only the artwork edge is a bounded integer`() {
+    fun `only the artwork edge, the windows of organizer listings and the part of a note are bounded integers`() {
         val bounded = mutableListOf<String>()
         fun walk(path: String, element: JsonElement) {
             when (element) {
@@ -207,7 +226,41 @@ class McpToolsTest {
             }
         }
         McpTools.all.forEach { walk(it.name, it.toJson()) }
-        assertEquals(listOf("media_artwork__get_artwork/inputSchema/properties/maxEdgePx"), bounded)
+        assertEquals(
+            listOf(
+                "media_artwork__get_artwork/inputSchema/properties/maxEdgePx",
+                "reminders__get_overview/inputSchema/properties/limit",
+                "reminders__get_overview/inputSchema/properties/offset",
+                "reminders__list_reminders/inputSchema/properties/limit",
+                "reminders__list_reminders/inputSchema/properties/offset",
+                "calendar__get_overview/inputSchema/properties/limit",
+                "calendar__get_overview/inputSchema/properties/offset",
+                "calendar__list_events/inputSchema/properties/limit",
+                "calendar__list_events/inputSchema/properties/offset",
+                "notes__get_overview/inputSchema/properties/limit",
+                "notes__get_overview/inputSchema/properties/offset",
+                "notes__list_notes/inputSchema/properties/limit",
+                "notes__list_notes/inputSchema/properties/offset",
+                "notes__get_note/inputSchema/properties/offset",
+                "notes__get_note/inputSchema/properties/maxChars",
+            ),
+            bounded,
+        )
+    }
+
+    @Test
+    fun `the annotations publish the effect of the operation as readOnlyHint and destructiveHint`() {
+        for (tool in McpTools.all) {
+            val expected = when (tool.operation.effect) {
+                OperationEffect.READ -> """{"readOnlyHint":true,"destructiveHint":false}"""
+                OperationEffect.WRITE -> """{"readOnlyHint":false,"destructiveHint":false}"""
+                OperationEffect.DESTRUCTIVE -> """{"readOnlyHint":false,"destructiveHint":true}"""
+            }
+            assertEquals(json(expected), tool.toJson()["annotations"], tool.name)
+        }
+        assertEquals(json("""{"readOnlyHint":true,"destructiveHint":false}"""), tool("media_library__list_playlists").toJson()["annotations"])
+        assertEquals(json("""{"readOnlyHint":false,"destructiveHint":false}"""), tool("notes__delete_note").toJson()["annotations"])
+        assertEquals(json("""{"readOnlyHint":false,"destructiveHint":true}"""), tool("notes__delete_note_permanently").toJson()["annotations"])
     }
 
     @Test
@@ -226,10 +279,10 @@ class McpToolsTest {
     }
 
     @Test
-    fun `the listed form carries name title description and both schemas`() {
+    fun `the listed form carries name title description both schemas and the annotations`() {
         val listed = tool("media_library__search_tracks").toJson()
 
-        assertEquals(setOf("name", "title", "description", "inputSchema", "outputSchema"), listed.keys)
+        assertEquals(setOf("name", "title", "description", "inputSchema", "outputSchema", "annotations"), listed.keys)
         assertEquals(listOf("query"), listed["inputSchema"]!!.jsonObject.required())
     }
 }

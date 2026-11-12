@@ -47,15 +47,28 @@ public class CompositePeerDirectory(directories: List<PeerDirectory>, scope: Cor
 /**
  * Sends each call through the route whose directory currently lists the peer (the first one, when several do).
  * A peer no directory lists is `provider_unavailable`.
+ *
+ * Streams follow the same choice: a stream call goes through the chosen route only when that route's transport is a
+ * [StreamingPeerTransport], which then decides for its peer. Otherwise the call is `provider_unavailable` before
+ * anything is sent; it never falls back to another route.
  */
-public class RoutingPeerTransport(private val routes: List<PeerRoute>) : PeerTransport {
+public class RoutingPeerTransport(private val routes: List<PeerRoute>) : StreamingPeerTransport {
     override suspend fun call(peer: PeerInfo, request: KoraRequest): KoraResponse = route(peer).call(peer, request)
 
     override fun subscribe(peer: PeerInfo, request: SubscribeRequest): Flow<KoraEvent> = flow {
         emitAll(route(peer).subscribe(peer, request))
     }
 
+    override suspend fun callSending(peer: PeerInfo, request: KoraRequest, bytes: ByteStream): KoraResponse =
+        streamingRoute(peer).callSending(peer, request, bytes)
+
+    override suspend fun callReceiving(peer: PeerInfo, request: KoraRequest): StreamedResponse =
+        streamingRoute(peer).callReceiving(peer, request)
+
     private fun route(peer: PeerInfo): PeerTransport =
         routes.firstOrNull { route -> route.directory.peers.value.any { it.nodeId == peer.nodeId } }?.transport
             ?: throw KoraException(KoraError(ErrorCode.PROVIDER_UNAVAILABLE, "Peer '${peer.nodeId}' is not reachable"))
+
+    private fun streamingRoute(peer: PeerInfo): StreamingPeerTransport = route(peer) as? StreamingPeerTransport
+        ?: throw KoraException(KoraError(ErrorCode.PROVIDER_UNAVAILABLE, "The route to '${peer.nodeId}' carries no byte streams"))
 }

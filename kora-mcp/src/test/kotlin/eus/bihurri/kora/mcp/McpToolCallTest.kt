@@ -1,5 +1,6 @@
 package eus.bihurri.kora.mcp
 
+import eus.bihurri.kora.contract.files.FilesCapability
 import eus.bihurri.kora.contract.media.MediaArtwork
 import eus.bihurri.kora.contract.media.MediaHistory
 import eus.bihurri.kora.contract.media.MediaLibrary
@@ -157,7 +158,8 @@ class McpToolCallTest {
             "fitness_session__get_active_session" to "{}",
             "location__get_last_fix" to "{}",
             "location__configure_stream" to """{"desiredIntervalMs":1000,"maxLatencyMs":3000}""",
-        )
+            "files__discard" to """{"fileId":"file-1"}""",
+        ) + organizerArguments
         assertEquals(McpTools.all.map { it.name }.toSet(), arguments.keys)
 
         for (tool in McpTools.all) {
@@ -178,6 +180,27 @@ class McpToolCallTest {
                 assertEquals(structured, Json.parseToJsonElement(answer.text()), tool.name)
             }
         }
+    }
+
+    @Test
+    fun `an operation that carries a byte stream is an unknown tool and reaches neither the node nor the provider`() = runTest {
+        initialize()
+        access.grants[AGENT] = allScopes + FilesCapability.ReadScope
+        val arguments = mapOf(
+            "files__upload" to """{"name":"photo.jpg","mimeType":"image/jpeg","sizeBytes":3}""",
+            "files__download" to """{"fileId":"file-1"}""",
+        )
+
+        for ((name, args) in arguments) {
+            val answer = call(name, args)
+            assertTrue("error" in answer, "$name answered $answer")
+            assertEquals(-32602, answer.errorCode, name)
+        }
+        assertEquals(emptyList<String>(), calls)
+        assertEquals(emptyList<Caller>(), audit.entries.map { it.caller })
+
+        assertFalse(call("files__discard", """{"fileId":"file-1"}""").isError())
+        assertEquals(listOf("discard"), calls)
     }
 
     @Test

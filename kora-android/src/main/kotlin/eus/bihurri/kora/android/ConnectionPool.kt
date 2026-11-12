@@ -13,8 +13,8 @@ import kotlin.time.Duration
 
 /** What a [BinderConnector] reports about one binding. Callbacks may arrive on any thread. */
 internal interface BindingEvents {
-    /** The peer's node is ready to use. */
-    fun onConnected(node: IKoraNode)
+    /** The peer's node is ready to use; it reported [protocolVersion] (see `KoraAndroid.PROTOCOL_VERSION`). */
+    fun onConnected(node: IKoraNode, protocolVersion: Int)
 
     /** The binding could not be established or was lost (peer died, was removed or refused to bind). */
     fun onLost(reason: String)
@@ -64,7 +64,8 @@ internal class ConnectionPool(
         val (connection, created) = hold(packageName)
         if (created) connection.start()
         try {
-            return Lease(connection.connected.await(), connection)
+            val connected = connection.connected.await()
+            return Lease(connected.node, connected.protocolVersion, connection)
         } catch (e: Throwable) {
             connection.unhold()
             throw e
@@ -91,8 +92,19 @@ internal class ConnectionPool(
 
     private fun unavailable(message: String) = KoraException(KoraError(ErrorCode.PROVIDER_UNAVAILABLE, message))
 
-    /** A holder of a connected node; releasing it lets the connection go idle. */
-    inner class Lease internal constructor(val node: IKoraNode, private val connection: Connection) {
+    /** A connected node and the protocol version it reported when it bound. */
+    class Connected(val node: IKoraNode, val protocolVersion: Int)
+
+    /**
+     * A holder of a connected node; releasing it lets the connection go idle. [protocolVersion] is what the peer
+     * reported when this connection bound, so callers can tell what it understands (byte streams need
+     * `KoraAndroid.STREAMS_PROTOCOL_VERSION`).
+     */
+    inner class Lease internal constructor(
+        val node: IKoraNode,
+        val protocolVersion: Int,
+        private val connection: Connection,
+    ) {
         private var released = false
 
         /**
@@ -111,7 +123,7 @@ internal class ConnectionPool(
     }
 
     internal inner class Connection(private val packageName: String) : BindingEvents {
-        val connected = CompletableDeferred<IKoraNode>()
+        val connected = CompletableDeferred<Connected>()
 
         // All fields below are guarded by [lock].
         var holders = 0
@@ -153,7 +165,7 @@ internal class ConnectionPool(
             if (stale) timer.cancel()
         }
 
-        override fun onConnected(node: IKoraNode) {
+        override fun onConnected(node: IKoraNode, protocolVersion: Int) {
             val accepted = synchronized(lock) {
                 if (finished) return@synchronized false
                 ready = true
@@ -161,7 +173,7 @@ internal class ConnectionPool(
                 true
             }
             if (!accepted) return
-            connected.complete(node)
+            connected.complete(Connected(node, protocolVersion))
             scheduleIdleIfUnused()
         }
 

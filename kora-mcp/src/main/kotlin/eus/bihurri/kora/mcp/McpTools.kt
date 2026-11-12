@@ -3,7 +3,9 @@ package eus.bihurri.kora.mcp
 import eus.bihurri.kora.contract.Capabilities
 import eus.bihurri.kora.contract.Capability
 import eus.bihurri.kora.contract.CapabilityRegistry
+import eus.bihurri.kora.contract.OperationEffect
 import eus.bihurri.kora.contract.OperationSpec
+import eus.bihurri.kora.contract.StreamDirection
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -11,7 +13,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
 /**
- * One MCP tool: one operation of a built-in capability.
+ * One MCP tool: one operation of a built-in capability that carries no byte stream.
  *
  * @property name `<capability with dots as underscores>__<operation>`, e.g. `media_library__list_playlists`. A
  *   capability at major 2 or later has `_v<major>` after the capability, e.g. `media_library_v2__list_playlists`
@@ -22,6 +24,11 @@ import kotlinx.serialization.json.put
  * @property wrapsOutput true when the operation's result is not a JSON object (`null`, a primitive or a list), so
  *   `structuredContent` is `{"result": <value>}` and [outputSchema] describes that wrapper.
  * @property content how a successful result's `content` blocks are made ([ToolContent.forOperation]).
+ *
+ * The listed form ([toJson]) also carries the standard tool `annotations`, `readOnlyHint` and `destructiveHint`, from
+ * the operation's [OperationSpec.effect]: [OperationEffect.READ] is read-only, [OperationEffect.DESTRUCTIVE] is
+ * destructive, and [OperationEffect.WRITE] is neither. They are hints for a client, never a permission: what a caller
+ * may call is still decided by its scopes.
  */
 public class McpTool internal constructor(
     public val name: String,
@@ -41,6 +48,13 @@ public class McpTool internal constructor(
         put("description", description)
         put("inputSchema", inputSchema)
         put("outputSchema", outputSchema)
+        put(
+            "annotations",
+            buildJsonObject {
+                put("readOnlyHint", operation.effect == OperationEffect.READ)
+                put("destructiveHint", operation.effect == OperationEffect.DESTRUCTIVE)
+            },
+        )
     }
 
     override fun toString(): String = "McpTool($name)"
@@ -48,8 +62,11 @@ public class McpTool internal constructor(
 
 /**
  * The MCP tools generated from a [CapabilityRegistry]: every operation of every capability version in it becomes
- * one tool, in the order of the registry. Events are not exposed: MCP tools are request/response, and subscriptions
- * are out of scope for this module.
+ * one tool, in the order of the registry, except an operation that carries a byte stream ([OperationSpec.stream] is
+ * not [StreamDirection.NONE]). JSON cannot carry the stream, so such an operation is not offered: `tools/call` of its
+ * name is an unknown tool, and the JSON gate answers it with `provider_unavailable` (`files__upload` and
+ * `files__download` are absent, `files__discard` is a tool). Events are not exposed: MCP tools are
+ * request/response, and subscriptions are out of scope for this module.
  *
  * Tools are major-aware. Each tool belongs to one [Capability] (so to one version), and calling it sends that
  * capability's version. Names follow [McpTools.nameOf]: the plain `<capability>__<operation>` for major 0 or 1, and
@@ -60,7 +77,7 @@ public class McpToolSet(
     public val registry: CapabilityRegistry,
 ) {
     public val all: List<McpTool> = registry.all.flatMap { capability ->
-        capability.operations.map { buildTool(capability, it) }
+        capability.operations.filter { it.stream == StreamDirection.NONE }.map { buildTool(capability, it) }
     }
 
     private val byName: Map<String, McpTool> = all.associateBy { it.name }

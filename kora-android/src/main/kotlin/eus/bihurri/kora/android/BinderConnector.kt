@@ -13,8 +13,22 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 /**
+ * Why a peer that reports protocol [version] cannot be used, or null when it can. The version is a minimum, not an
+ * equality: every peer from [KoraAndroid.MIN_PEER_PROTOCOL_VERSION] on is accepted, older or newer than this app, so
+ * an app on a newer Kora keeps seeing the apps still on an older one. What a peer's version does not offer (byte
+ * streams below [KoraAndroid.STREAMS_PROTOCOL_VERSION]) is refused per call by the transport instead.
+ */
+internal fun peerProtocolRefusal(version: Int): String? =
+    if (version < KoraAndroid.MIN_PEER_PROTOCOL_VERSION) {
+        "Peer speaks protocol $version, which is older than ${KoraAndroid.MIN_PEER_PROTOCOL_VERSION}"
+    } else {
+        null
+    }
+
+/**
  * [BinderConnector] over `Context.bindService`: binds the [KoraAndroid.ACTION_NODE] service of the peer package
- * with `BIND_AUTO_CREATE` and checks the protocol version off the main thread before reporting it connected.
+ * with `BIND_AUTO_CREATE` and checks the protocol version off the main thread (see [peerProtocolRefusal]) before
+ * reporting it connected with that version.
  */
 internal class AndroidBinderConnector(
     private val context: Context,
@@ -33,11 +47,8 @@ internal class AndroidBinderConnector(
                         events.onLost("Peer died during the handshake")
                         return@launch
                     }
-                    if (version < KoraAndroid.PROTOCOL_VERSION) {
-                        events.onLost("Peer speaks protocol $version, which is older than ${KoraAndroid.PROTOCOL_VERSION}")
-                    } else {
-                        events.onConnected(node)
-                    }
+                    val refusal = peerProtocolRefusal(version)
+                    if (refusal != null) events.onLost(refusal) else events.onConnected(node, version)
                 }
             }
 

@@ -22,6 +22,11 @@ versioned and backward compatible, so nobody has to update at the same time.
 5. **Transports are versioned separately**: Binder (`IKoraNode.protocolVersion`), the wear bridge (frame header
    version), the adb gate (method names), MCP (negotiated protocol revision). A transport version is raised only for
    additive changes, and the old one is kept readable.
+   - Binder is at version 2 (`KoraAndroid.PROTOCOL_VERSION`), which appends the two stream methods `callSending`
+     and `callReceiving` to version 1's calls and subscriptions. A peer from version 1 on
+     (`MIN_PEER_PROTOCOL_VERSION`) is accepted, older or newer. Byte streams go only to a peer on version 2 or later
+     (`STREAMS_PROTOCOL_VERSION`); with an older peer a stream operation fails with `provider_unavailable` before
+     anything is sent. An app on Kora 1.2 or earlier speaks version 1 and accepts a peer on version 2.
 6. **Atomic capabilities**: a provider of `x@1.1` provides every member of 1.1, so a caller that sees `x@1.1` can rely
    on all of it.
 7. **New apps** join by consuming Kora; new vocabulary is added to Kora as new capabilities or minor versions, never
@@ -79,6 +84,16 @@ on smaller transports, so it needs a new major.
    - The current encoding of the **current** version must equal the stored fixture, which catches an accidental wire
      change (a renamed field, a changed default, a serializer upgrade).
    - Every operation and event of a built-in capability must have samples (a new member cannot ship without them).
+   - Operations that carry a byte stream (`OperationSpec.stream`: `upload` or `download`) change no wire format and
+     need no fixture of their own kind: the direction is not serialized (each side reads it from its own registry),
+     their input and output are ordinary types with fixtures like any other, and the bytes travel beside the envelope,
+     never in it. `files@1.0`, the first built-in capability with stream operations, has its fixtures in
+     `wire/files/1.0/` like every other capability.
+   - The effect of an operation (`OperationSpec.effect`: `READ`, `WRITE` or `DESTRUCTIVE`) is not serialized either:
+     no descriptor, envelope or fixture carries it, and each side reads it from its own definition of the operation
+     (MCP publishes it as tool annotations). Declaring it on the existing operations in `1.3.0` changed no wire
+     format and no released fixture. Changing the effect of a released operation changes no bytes, but it changes
+     what callers confirm, so it is reviewed like a change of meaning.
 2. **Forward tolerance**: the encoded samples are edited to look like a future minor (an extra field in every object, an
    unknown enum constant in every enum field) and must read like the originals in both codecs; a peer whose descriptor
    has unknown fields, unknown capabilities and a newer minor routes, calls and subscribes normally. This is the

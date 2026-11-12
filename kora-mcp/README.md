@@ -12,8 +12,11 @@ per caller, over `adb`) and the PC-side stdio bridge `:kora-bridge`.
 
 ## Tools
 One tool per operation of the built-in capabilities the node can reach now (its own or a compatible peer's), named
-`<capability, dots as underscores>__<operation>`, e.g. `media_library__list_playlists`. The description adds the
-required scope. `inputSchema` and `outputSchema` (JSON Schema 2020-12) are generated from the serializer
+`<capability, dots as underscores>__<operation>`, e.g. `media_library__list_playlists`, except the operations that
+carry a byte stream (`OperationSpec.stream`): JSON cannot carry the bytes, so `files__upload` and `files__download`
+are not tools and `tools/call` of such a name is an unknown tool (`-32602`), while `files__discard`, which carries
+none, is one. A tool's description adds the required scope. Through the JSON gate (`JsonGate`, the adb gate's
+`kora.call.json`) a stream operation answers `provider_unavailable`. `inputSchema` and `outputSchema` (JSON Schema 2020-12) are generated from the serializer
 descriptors (`JsonSchemas.input` / `JsonSchemas.output`): `required` = properties without default, wire enums list
 their values without `unknown` in an `inputSchema` (a caller never sends it) and with `unknown` last in an
 `outputSchema` (a result may come from a peer on a newer minor whose new constant this build reads as `unknown`, so
@@ -23,6 +26,12 @@ their values without `unknown` in an `inputSchema` (a caller never sends it) and
 is wrapped as `{"result": ...}`. `tools/list` paginates with opaque cursors; a peer joining or leaving emits
 `notifications/tools/list_changed`. Because `KoraNode.provide` requires a handler for every operation of the capability
 (a capability is atomic), every advertised tool is backed by a handler: none answers `unknown_operation`.
+
+Every listed tool carries the standard MCP tool `annotations` `readOnlyHint` and `destructiveHint` (defined since
+revision `2025-03-26`), taken from the operation's effect (`OperationSpec.effect`):
+`READ` is `{"readOnlyHint":true,"destructiveHint":false}`, `WRITE` `{"readOnlyHint":false,"destructiveHint":false}`
+and `DESTRUCTIVE` `{"readOnlyHint":false,"destructiveHint":true}`, e.g. `notes__delete_note_permanently`. They are
+hints for the client; what a caller may call is still decided by its scopes. Nothing else of a tool's JSON changes.
 
 A successful result's `content` is one `text` block holding the `structuredContent` JSON, except for
 `media_artwork__get_artwork`: an `image` block (`data` = the Base64 of `structuredContent.bytes`, `mimeType`) plus a

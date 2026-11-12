@@ -1,6 +1,8 @@
 package eus.bihurri.kora.mcp
 
 import eus.bihurri.kora.contract.Scope
+import eus.bihurri.kora.contract.files.FileHandle
+import eus.bihurri.kora.contract.files.FilesCapability
 import eus.bihurri.kora.contract.fitness.ActiveSession
 import eus.bihurri.kora.contract.fitness.FitnessSession
 import eus.bihurri.kora.contract.fitness.SessionPhase
@@ -21,10 +23,12 @@ import eus.bihurri.kora.contract.media.PlaylistSummary
 import eus.bihurri.kora.contract.media.TrackSummary
 import eus.bihurri.kora.core.AuditEntry
 import eus.bihurri.kora.core.AuditLog
+import eus.bihurri.kora.core.ByteStream
 import eus.bihurri.kora.core.Caller
 import eus.bihurri.kora.core.CallerKind
 import eus.bihurri.kora.core.KoraNode
 import eus.bihurri.kora.core.ExternalAccess
+import eus.bihurri.kora.core.WithBytes
 import eus.bihurri.kora.core.testing.provideStubbed
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -32,6 +36,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
+import java.io.ByteArrayInputStream
 
 val AGENT = Caller(CallerKind.REMOTE_AGENT, "agent-7")
 
@@ -60,8 +65,10 @@ val plays = listOf(PlayRecord(trackOne, startedAtEpochMs = 1_000, playedMs = 900
 val activeSession = ActiveSession("s1", "hiking", SessionPhase.RECORDING, startedAtEpochMs = 5, elapsedMs = 10, distanceMeters = 1.5)
 val lastFix = LocationFix(43.26, -2.93, timeEpochMs = 99)
 val artworkImage = ArtworkImage(byteArrayOf(1, 2, 3), ArtworkMimeType.PNG, widthPx = 2, heightPx = 2)
+val fileBytes = byteArrayOf(4, 5, 6)
+val fileHandle = FileHandle("file-1", "photo.jpg", "image/jpeg", fileBytes.size.toLong())
 
-/** Gives [this] node every built-in capability, answering with fixed data. */
+/** Gives [this] node every built-in capability, answering with fixed data; [onCall] hears the handlers that report. */
 fun KoraNode.provideEverything(onCall: (String) -> Unit = {}) {
     provideStubbed(MediaLibrary) {
         on(MediaLibrary.ListPlaylists) { page ->
@@ -99,6 +106,19 @@ fun KoraNode.provideEverything(onCall: (String) -> Unit = {}) {
     provideStubbed(LocationCapability) {
         on(LocationCapability.GetLastFix) { lastFix }
         on(LocationCapability.ConfigureStream) { StreamConfig(it.desiredIntervalMs, it.maxLatencyMs) }
+    }
+    provideOrganizer()
+    // Only discard is a tool; upload and download carry a byte stream, so no MCP call may reach them.
+    provide(FilesCapability) {
+        onUpload(FilesCapability.Upload) { request, bytes ->
+            onCall("upload")
+            FileHandle("file-1", request.name, request.mimeType, bytes.sizeBytes)
+        }
+        onDownload(FilesCapability.Download) {
+            onCall("download")
+            WithBytes(fileHandle, ByteStream(fileBytes.size.toLong(), ByteArrayInputStream(fileBytes)))
+        }
+        on(FilesCapability.Discard) { onCall("discard") }
     }
 }
 

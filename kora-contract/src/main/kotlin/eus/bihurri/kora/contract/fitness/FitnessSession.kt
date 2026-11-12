@@ -5,6 +5,7 @@ import eus.bihurri.kora.contract.CapabilityId
 import eus.bihurri.kora.contract.CapabilityVersion
 import eus.bihurri.kora.contract.EventSpec
 import eus.bihurri.kora.contract.NoInput
+import eus.bihurri.kora.contract.OperationEffect
 import eus.bihurri.kora.contract.OperationSpec
 import eus.bihurri.kora.contract.Scope
 import eus.bihurri.kora.contract.TolerantEnumSerializer
@@ -54,6 +55,7 @@ public object FitnessSession : Capability(CapabilityId("fitness.session"), Capab
         input = NoInput.serializer(),
         output = ActiveSession.serializer().nullable,
         scope = ReadScope,
+        effect = OperationEffect.READ,
         description = "Get the session in progress, or null when none is active.",
     )
 

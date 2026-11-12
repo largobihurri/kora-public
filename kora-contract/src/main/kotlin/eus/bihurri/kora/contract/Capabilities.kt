@@ -1,11 +1,17 @@
 package eus.bihurri.kora.contract
 
+import eus.bihurri.kora.contract.calendar.CalendarCapability
+import eus.bihurri.kora.contract.files.FilesCapability
 import eus.bihurri.kora.contract.fitness.FitnessSession
 import eus.bihurri.kora.contract.location.LocationCapability
 import eus.bihurri.kora.contract.media.MediaArtwork
 import eus.bihurri.kora.contract.media.MediaHistory
 import eus.bihurri.kora.contract.media.MediaLibrary
 import eus.bihurri.kora.contract.media.MediaPlayback
+import eus.bihurri.kora.contract.notes.NoteAttachments
+import eus.bihurri.kora.contract.notes.NotesCapability
+import eus.bihurri.kora.contract.reminders.ReminderAttachments
+import eus.bihurri.kora.contract.reminders.RemindersCapability
 
 /**
  * A set of capability definitions that can be looked up by id and by major version.
@@ -56,9 +62,17 @@ public class CapabilityRegistry(capabilities: List<Capability>) {
  * the overloads with `major` whenever you know the version a request asks for.
  */
 public object Capabilities {
-    /** The built-in definitions as a [CapabilityRegistry], the default of everything that looks capabilities up. */
-    public val registry: CapabilityRegistry =
-        CapabilityRegistry(listOf(MediaLibrary, MediaPlayback, MediaHistory, MediaArtwork, FitnessSession, LocationCapability))
+    /**
+     * The built-in definitions as a [CapabilityRegistry], the default of everything that looks capabilities up. A new
+     * capability is appended, so the order of the earlier ones, and of their MCP tools, stays as it was.
+     */
+    public val registry: CapabilityRegistry = CapabilityRegistry(
+        listOf(
+            MediaLibrary, MediaPlayback, MediaHistory, MediaArtwork, FitnessSession, LocationCapability,
+            RemindersCapability, CalendarCapability, NotesCapability,
+            ReminderAttachments, NoteAttachments, FilesCapability,
+        ),
+    )
 
     /** Every built-in definition; one entry per id and major. */
     public val all: List<Capability> get() = registry.all

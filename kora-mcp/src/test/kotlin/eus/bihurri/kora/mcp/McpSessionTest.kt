@@ -268,18 +268,21 @@ class McpSessionTest {
     }
 
     @Test
-    fun `a listed tool has name title description and both schemas`() = runTest {
+    fun `a listed tool has name title description both schemas and the annotations`() = runTest {
         val tool = parse(session().initialized().handle(rpc("tools/list"))).resultObject["tools"]!!.jsonArray[0].jsonObject
 
-        assertEquals(setOf("name", "title", "description", "inputSchema", "outputSchema"), tool.keys)
+        assertEquals(setOf("name", "title", "description", "inputSchema", "outputSchema", "annotations"), tool.keys)
+        assertEquals(true, tool["annotations"]!!.jsonObject["readOnlyHint"]!!.jsonPrimitive.content.toBoolean())
         assertEquals("object", tool["inputSchema"]!!.jsonObject["type"]!!.jsonPrimitive.content)
     }
 
     @Test
     fun `the full catalogue is listed in order and is stable`() = runTest {
         val everything = KoraNode("all").apply { provideEverything() }
-        val first = toolNames(parse(session(target = everything).initialized().handle(rpc("tools/list"))))
-        val second = toolNames(parse(session(target = everything).initialized().handle(rpc("tools/list"))))
+        // The catalogue is larger than the default page, so ask for it in one page.
+        val onePage = McpTools.all.size
+        val first = toolNames(parse(session(onePage, everything).initialized().handle(rpc("tools/list"))))
+        val second = toolNames(parse(session(onePage, everything).initialized().handle(rpc("tools/list"))))
 
         assertEquals(McpTools.all.map { it.name }, first)
         assertEquals(first, second)

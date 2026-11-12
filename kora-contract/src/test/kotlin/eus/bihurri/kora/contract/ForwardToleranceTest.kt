@@ -24,6 +24,20 @@ class ForwardToleranceTest {
     }
 
     @Test
+    fun `unknown constants of the organizer enums read as unknown in every payload that holds one`() {
+        val organizer = WireSamples.cases.filter { it.group in setOf("reminders", "calendar", "notes") }
+        val fields = setOf(
+            "priority", "smartList", "snooze", "earlyAlertUnit", "repeatUnit", "repeatOrdinal", "repeatDayKind",
+            "availability", "span", "sort", "view",
+        )
+        // A list colour is an enum; a calendar colour is the string #RRGGBB, which a request checks.
+        val listColors = WireSamples.cases.filter { it.group == "reminders" }
+
+        assertTrue(FuturePayloads.verifyUnknownEnumConstantsReadAsUnknown(organizer, fields) > 0)
+        assertTrue(FuturePayloads.verifyUnknownEnumConstantsReadAsUnknown(listColors, setOf("color")) > 0)
+    }
+
+    @Test
     fun `the editing machinery keeps untouched payloads intact`() {
         assertEquals(0, FuturePayloads.verifyUnknownEnumConstantsReadAsUnknown(WireSamples.cases, fields = emptySet()))
     }

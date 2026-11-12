@@ -1,11 +1,17 @@
 package eus.bihurri.kora.contract
 
+import eus.bihurri.kora.contract.calendar.CalendarCapability
+import eus.bihurri.kora.contract.files.FilesCapability
 import eus.bihurri.kora.contract.fitness.FitnessSession
 import eus.bihurri.kora.contract.location.LocationCapability
 import eus.bihurri.kora.contract.media.MediaArtwork
 import eus.bihurri.kora.contract.media.MediaHistory
 import eus.bihurri.kora.contract.media.MediaLibrary
 import eus.bihurri.kora.contract.media.MediaPlayback
+import eus.bihurri.kora.contract.notes.NoteAttachments
+import eus.bihurri.kora.contract.notes.NotesCapability
+import eus.bihurri.kora.contract.reminders.ReminderAttachments
+import eus.bihurri.kora.contract.reminders.RemindersCapability
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
@@ -16,19 +22,49 @@ import org.junit.jupiter.api.Test
 
 class CapabilitiesTest {
     @Test
-    fun `registry lists the six built-ins`() {
+    fun `registry lists the built-ins`() {
         assertEquals(
-            setOf("media.library", "media.playback", "media.history", "media.artwork", "fitness.session", "location"),
+            setOf(
+                "media.library", "media.playback", "media.history", "media.artwork", "fitness.session", "location",
+                "reminders", "calendar", "notes", "reminders.attachments", "notes.attachments",
+                "files",
+            ),
             Capabilities.all.map { it.id.value }.toSet(),
         )
         assertEquals(
             mapOf(
                 "media.library" to 0, "media.playback" to 0, "media.history" to 0, "media.artwork" to 0, "fitness.session" to 0,
                 "location" to 1,
+                "reminders" to 0, "calendar" to 0, "notes" to 0,
+                "reminders.attachments" to 0, "notes.attachments" to 0,
+                "files" to 0,
             ),
             Capabilities.all.associate { it.id.value to it.version.minor },
         )
         assertTrue(Capabilities.all.all { it.version.major == 1 })
+    }
+
+    @Test
+    fun `the organizer capabilities come after the earlier built-ins, whose order is unchanged, and files comes last`() {
+        assertEquals(
+            listOf(
+                MediaLibrary, MediaPlayback, MediaHistory, MediaArtwork, FitnessSession, LocationCapability,
+                RemindersCapability, CalendarCapability, NotesCapability,
+                ReminderAttachments, NoteAttachments,
+                FilesCapability,
+            ),
+            Capabilities.all,
+        )
+        assertSame(RemindersCapability, Capabilities.find("reminders"))
+        assertSame(CalendarCapability, Capabilities.find("calendar", 1))
+        assertSame(NotesCapability, Capabilities.find(CapabilityId("notes")))
+        assertSame(ReminderAttachments, Capabilities.find("reminders.attachments"))
+        assertNull(Capabilities.find("calendar.attachments"))
+        assertSame(NoteAttachments, Capabilities.find("notes.attachments", 1))
+        assertSame(FilesCapability, Capabilities.find("files"))
+        assertSame(FilesCapability, Capabilities.find(CapabilityId("files"), 1))
+        assertEquals(36, listOf(RemindersCapability, CalendarCapability, NotesCapability).sumOf { it.operations.size })
+        assertEquals(0, Capabilities.all.drop(6).sumOf { it.events.size })
     }
 
     @Test

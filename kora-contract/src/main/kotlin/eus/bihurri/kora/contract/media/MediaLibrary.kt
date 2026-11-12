@@ -3,6 +3,7 @@ package eus.bihurri.kora.contract.media
 import eus.bihurri.kora.contract.Capability
 import eus.bihurri.kora.contract.CapabilityId
 import eus.bihurri.kora.contract.CapabilityVersion
+import eus.bihurri.kora.contract.OperationEffect
 import eus.bihurri.kora.contract.OperationSpec
 import eus.bihurri.kora.contract.Scope
 
@@ -15,6 +16,7 @@ public object MediaLibrary : Capability(CapabilityId("media.library"), Capabilit
         input = PageRequest.serializer(),
         output = Page.serializer(PlaylistSummary.serializer()),
         scope = ReadScope,
+        effect = OperationEffect.READ,
         description = "List the user's playlists, one page at a time.",
     )
 
@@ -23,6 +25,7 @@ public object MediaLibrary : Capability(CapabilityId("media.library"), Capabilit
         input = PlaylistTracksRequest.serializer(),
         output = Page.serializer(TrackSummary.serializer()),
         scope = ReadScope,
+        effect = OperationEffect.READ,
         description = "List the tracks of one playlist, one page at a time.",
     )
 
@@ -31,6 +34,7 @@ public object MediaLibrary : Capability(CapabilityId("media.library"), Capabilit
         input = SearchRequest.serializer(),
         output = Page.serializer(TrackSummary.serializer()),
         scope = ReadScope,
+        effect = OperationEffect.READ,
         description = "Search tracks by free text (title, artist, album).",
     )
 }

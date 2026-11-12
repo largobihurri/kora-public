@@ -56,7 +56,9 @@ import kotlin.time.Duration.Companion.seconds
  * payload, so that an unauthorized caller is refused and audited (and `onDenied` fires) before it learns
  * anything about the contract.
  *
- * Only the capabilities in [registry] (by default [Capabilities]) can be called this way.
+ * Only the capabilities in [registry] (by default [Capabilities]) can be called this way. JSON carries no byte
+ * stream, so an operation that has one (`OperationSpec.stream`) is answered `provider_unavailable` by the node,
+ * after the policy.
  *
  * @param node the node to call.
  * @param codec the codec of the node's payloads; it must be the one [node] was built with.

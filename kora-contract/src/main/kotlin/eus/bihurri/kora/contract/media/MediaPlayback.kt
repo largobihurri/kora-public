@@ -5,6 +5,7 @@ import eus.bihurri.kora.contract.CapabilityId
 import eus.bihurri.kora.contract.CapabilityVersion
 import eus.bihurri.kora.contract.EventSpec
 import eus.bihurri.kora.contract.NoInput
+import eus.bihurri.kora.contract.OperationEffect
 import eus.bihurri.kora.contract.OperationSpec
 import eus.bihurri.kora.contract.Scope
 import kotlinx.serialization.builtins.serializer
@@ -25,6 +26,7 @@ public object MediaPlayback : Capability(CapabilityId("media.playback"), Capabil
         input = SeekRequest.serializer(),
         output = Unit.serializer(),
         scope = ControlScope,
+        effect = OperationEffect.WRITE,
         description = "Move the playback position of the current track, in milliseconds.",
     )
 
@@ -33,6 +35,7 @@ public object MediaPlayback : Capability(CapabilityId("media.playback"), Capabil
         input = PlayPlaylistRequest.serializer(),
         output = Unit.serializer(),
         scope = ControlScope,
+        effect = OperationEffect.WRITE,
         description = "Replace the queue with a playlist and start playing from startIndex, optionally shuffled.",
     )
 
@@ -41,6 +44,7 @@ public object MediaPlayback : Capability(CapabilityId("media.playback"), Capabil
         input = PlayTracksRequest.serializer(),
         output = Unit.serializer(),
         scope = ControlScope,
+        effect = OperationEffect.WRITE,
         description = "Replace the queue with the given tracks and start playing from startIndex.",
     )
 
@@ -49,6 +53,7 @@ public object MediaPlayback : Capability(CapabilityId("media.playback"), Capabil
         input = NoInput.serializer(),
         output = PlaybackState.serializer(),
         scope = ReadScope,
+        effect = OperationEffect.READ,
         description = "Get the current playback state.",
     )
 
@@ -67,5 +72,5 @@ public object MediaPlayback : Capability(CapabilityId("media.playback"), Capabil
     )
 
     private fun command(name: String, description: String): OperationSpec<NoInput, Unit> =
-        operation(name, NoInput.serializer(), Unit.serializer(), ControlScope, description)
+        operation(name, NoInput.serializer(), Unit.serializer(), ControlScope, description, OperationEffect.WRITE)
 }

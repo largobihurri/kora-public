@@ -59,10 +59,29 @@ public object KoraAndroid {
     public const val ACTION_NODE: String = "eus.bihurri.kora.action.NODE"
 
     /**
-     * Version of the Binder interface between peers. It only grows, and only with additive changes; a breaking
-     * change would ship under a new interface and action.
+     * Version of the Binder interface between peers that this app speaks. It only grows, and only with additive
+     * changes; a breaking change would ship under a new interface and action.
+     *
+     * - 1: calls and subscriptions.
+     * - 2: byte streams beside a call ([STREAMS_PROTOCOL_VERSION]), for operations that declare one.
+     *
+     * A peer that reports any version from [MIN_PEER_PROTOCOL_VERSION] on is used, older or newer than this one;
+     * what an older peer does not know is not asked of it.
      */
-    public const val PROTOCOL_VERSION: Int = 1
+    public const val PROTOCOL_VERSION: Int = 2
+
+    /**
+     * Oldest protocol version of a peer this app still talks to: 1, the first one. A peer that reports less is
+     * refused when binding. Every version from this one on serves calls and subscriptions.
+     */
+    public const val MIN_PEER_PROTOCOL_VERSION: Int = 1
+
+    /**
+     * First protocol version that carries byte streams: 2. A stream operation (an upload or a download) goes only
+     * to a peer that reports this version or a later one; with an older peer it fails with `provider_unavailable`
+     * before anything is sent.
+     */
+    public const val STREAMS_PROTOCOL_VERSION: Int = 2
 
     private const val TAG = "KoraAndroid"
 
@@ -74,6 +93,9 @@ public object KoraAndroid {
         val scope: CoroutineScope,
         val gate: ExternalGate,
         val mcp: McpGate,
+        val transport: BinderPeerTransport,
+        /** Handed to the `NodeServer` that `KoraNodeService` builds when it is bound. */
+        val streamIdleTimeout: Duration,
     ) {
         @Volatile
         var server: NodeServer? = null
@@ -100,6 +122,11 @@ public object KoraAndroid {
      * @param callTimeout limit for one outbound call, including binding to a peer that is not running yet.
      * @param connectTimeout how long to wait for a peer to accept the binding.
      * @param idleTimeout a connection to a peer with no call and no subscription in flight is unbound after this.
+     * @param streamIdleTimeout limit for a byte stream that stalls, in either direction and on either side: a stream
+     *   call is not bound by [callTimeout] and fails with `timeout` when, for this long, no byte moves while one is
+     *   awaited and no answer arrives. The side that serves a download waits twice as long for its provider's bytes
+     *   before it drops them, so that the caller's read times out first. An upload's answer must arrive within this
+     *   time of its last byte, so an upload handler only stages what it received and leaves slow work for later.
      * @param onInternalError notified when a failure is reported to a caller as `internal`.
      * @param peerRoutes further ways of reaching peers, next to Binder (for example `KoraWear.route` for the paired
      *   watch or phone). The node lists the peers of every route; when two list the same node id, Binder wins,
@@ -116,6 +143,7 @@ public object KoraAndroid {
         callTimeout: Duration = 5.seconds,
         connectTimeout: Duration = 3.seconds,
         idleTimeout: Duration = 30.seconds,
+        streamIdleTimeout: Duration = 10.seconds,
         onInternalError: (Throwable) -> Unit = { Log.w(TAG, "Internal error", it) },
         peerRoutes: List<PeerRoute> = emptyList(),
         configure: KoraNode.() -> Unit = {},
@@ -123,7 +151,7 @@ public object KoraAndroid {
         check(runtime == null) { "KoraAndroid is already installed" }
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         val pool = ConnectionPool(AndroidBinderConnector(application, scope), scope, connectTimeout, idleTimeout)
-        val transport = BinderPeerTransport(pool)
+        val transport = BinderPeerTransport(pool, streamScope = scope, streamIdleTimeout = streamIdleTimeout)
         val directory = AndroidPeerDirectory(
             scanner = AndroidPeerScanner(application),
             fetcher = { transport.describe(it) },
@@ -144,7 +172,10 @@ public object KoraAndroid {
         )
         node.configure()
         val serverInfo = McpServerInfo(application.packageName, versionNameOf(application), title = displayName)
-        runtime = Runtime(node, application, directory, pool, scope, ExternalGate(node, callTimeout), McpGate(node, serverInfo, callTimeout))
+        runtime = Runtime(
+            node, application, directory, pool, scope, ExternalGate(node, callTimeout), McpGate(node, serverInfo, callTimeout),
+            transport, streamIdleTimeout,
+        )
         installed.countDown()
         directory.start()
         node

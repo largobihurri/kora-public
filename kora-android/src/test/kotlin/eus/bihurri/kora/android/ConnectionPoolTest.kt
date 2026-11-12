@@ -36,12 +36,26 @@ class ConnectionPoolTest {
         runCurrent()
         assertEquals(1, connector.attempts.size)
 
-        connector.attempts[0].events.onConnected(node)
+        connector.attempts[0].events.onConnected(node, node.version)
         runCurrent()
 
         assertSame(node, first.await().node)
         assertSame(node, second.await().node)
         assertEquals(1, pool.size)
+    }
+
+    @Test
+    fun `a lease carries the protocol version its peer reported`() = runTest {
+        val pool = pool()
+        val old = async { pool.acquire("old") }
+        val current = async { pool.acquire("current") }
+        runCurrent()
+
+        connector.attempts[0].events.onConnected(node, 1)
+        connector.attempts[1].events.onConnected(node, 2)
+
+        assertEquals(1, old.await().protocolVersion)
+        assertEquals(2, current.await().protocolVersion)
     }
 
     @Test
@@ -51,7 +65,7 @@ class ConnectionPoolTest {
         val b = async { pool.acquire("b") }
         runCurrent()
         assertEquals(listOf("a", "b"), connector.attempts.map { it.packageName })
-        connector.attempts.forEach { it.events.onConnected(node) }
+        connector.attempts.forEach { it.events.onConnected(node, node.version) }
         a.await()
         b.await()
         assertEquals(2, pool.size)
@@ -77,7 +91,7 @@ class ConnectionPoolTest {
         val pool = pool(connect = 5)
         val lease = async { pool.acquire("pkg") }
         runCurrent()
-        connector.attempts[0].events.onConnected(node)
+        connector.attempts[0].events.onConnected(node, node.version)
         lease.await()
 
         advanceTimeBy(10.seconds)
@@ -108,7 +122,7 @@ class ConnectionPoolTest {
         val pool = pool()
         val first = async { pool.acquire("pkg") }
         runCurrent()
-        connector.attempts[0].events.onConnected(node)
+        connector.attempts[0].events.onConnected(node, node.version)
         val lease = first.await()
         var lost = 0
         lease.onLost { lost++ }
@@ -123,7 +137,7 @@ class ConnectionPoolTest {
         runCurrent()
         assertEquals(2, connector.attempts.size)
         val fresh = FakeRemoteNode()
-        connector.attempts[1].events.onConnected(fresh)
+        connector.attempts[1].events.onConnected(fresh, fresh.version)
         assertSame(fresh, second.await().node)
     }
 
@@ -132,7 +146,7 @@ class ConnectionPoolTest {
         val pool = pool()
         val pending = async { pool.acquire("pkg") }
         runCurrent()
-        connector.attempts[0].events.onConnected(node)
+        connector.attempts[0].events.onConnected(node, node.version)
         val lease = pending.await()
         var disposedRan = false
         lease.onLost { disposedRan = true }.close()
@@ -163,7 +177,7 @@ class ConnectionPoolTest {
         val pool = pool(idle = 30)
         val pending = async { pool.acquire("pkg") }
         runCurrent()
-        connector.attempts[0].events.onConnected(node)
+        connector.attempts[0].events.onConnected(node, node.version)
         pending.await().release()
 
         advanceTimeBy(29.seconds)
@@ -181,7 +195,7 @@ class ConnectionPoolTest {
         val pool = pool(idle = 30)
         val pending = async { pool.acquire("pkg") }
         runCurrent()
-        connector.attempts[0].events.onConnected(node)
+        connector.attempts[0].events.onConnected(node, node.version)
         val lease = pending.await()
 
         advanceTimeBy(120.seconds)
@@ -200,7 +214,7 @@ class ConnectionPoolTest {
         val pool = pool(idle = 30)
         val first = async { pool.acquire("pkg") }
         runCurrent()
-        connector.attempts[0].events.onConnected(node)
+        connector.attempts[0].events.onConnected(node, node.version)
         first.await().release()
 
         advanceTimeBy(20.seconds)
@@ -228,7 +242,7 @@ class ConnectionPoolTest {
         pending.cancel()
         runCurrent()
 
-        connector.attempts[0].events.onConnected(node)
+        connector.attempts[0].events.onConnected(node, node.version)
         advanceTimeBy(31.seconds)
         runCurrent()
 
@@ -240,7 +254,7 @@ class ConnectionPoolTest {
         val pool = pool()
         val pending = async { pool.acquire("pkg") }
         runCurrent()
-        connector.attempts[0].events.onConnected(node)
+        connector.attempts[0].events.onConnected(node, node.version)
         var lost = false
         pending.await().onLost { lost = true }
 

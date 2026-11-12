@@ -5,6 +5,7 @@ import eus.bihurri.kora.contract.CapabilityId
 import eus.bihurri.kora.contract.CapabilityVersion
 import eus.bihurri.kora.contract.EventSpec
 import eus.bihurri.kora.contract.NoInput
+import eus.bihurri.kora.contract.OperationEffect
 import eus.bihurri.kora.contract.OperationSpec
 import eus.bihurri.kora.contract.Scope
 import kotlinx.serialization.Serializable
@@ -90,6 +91,7 @@ public object LocationCapability : Capability(CapabilityId("location"), Capabili
         input = NoInput.serializer(),
         output = LocationFix.serializer().nullable,
         scope = ReadScope,
+        effect = OperationEffect.READ,
         description = "Get the most recent position fix, or null when none is available.",
     )
 
@@ -105,6 +107,7 @@ public object LocationCapability : Capability(CapabilityId("location"), Capabili
         input = StreamRequest.serializer(),
         output = StreamConfig.serializer(),
         scope = ReadScope,
+        effect = OperationEffect.READ,
         description = "Set how often fixes are produced and how long they may wait before delivery for the " +
             "fixes_batched subscriptions this caller opens next. Answers the values the provider granted.",
     )
