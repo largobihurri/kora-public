@@ -1,0 +1,144 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "eus.bihurri.kora",
+    "module": "kora-contract",
+    "version": "1.3.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "9.8.1"
+    }
+  },
+  "variants": [
+    {
+      "name": "apiElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.jvm.version": 17,
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-serialization-core",
+          "version": {
+            "requires": "1.11.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-serialization-json",
+          "version": {
+            "requires": "1.11.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-serialization-cbor",
+          "version": {
+            "requires": "1.11.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.4.21"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "kora-contract-1.3.0.jar",
+          "url": "kora-contract-1.3.0.jar",
+          "size": 728105,
+          "sha512": "f19fc852480de32f20bb98eeaab07754e7c81f217dc37fedc349cc4d7dc0b73d79079ff58ee34ec11a2f40acaebdf113e72a5e869e59928d8c8d46017d993097",
+          "sha256": "f84a8320f9907ecc355708a08a7f7dcdae9ada7617ea2edd0d3c5aa5c8d8e5c3",
+          "sha1": "a8f33dfd2ef0172c73c090cfc2db75c1c5202581",
+          "md5": "4407465bb07895c2dcc6b8d878259755"
+        }
+      ]
+    },
+    {
+      "name": "runtimeElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.jvm.version": 17,
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-serialization-core",
+          "version": {
+            "requires": "1.11.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-serialization-json",
+          "version": {
+            "requires": "1.11.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-serialization-cbor",
+          "version": {
+            "requires": "1.11.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.4.21"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "kora-contract-1.3.0.jar",
+          "url": "kora-contract-1.3.0.jar",
+          "size": 728105,
+          "sha512": "f19fc852480de32f20bb98eeaab07754e7c81f217dc37fedc349cc4d7dc0b73d79079ff58ee34ec11a2f40acaebdf113e72a5e869e59928d8c8d46017d993097",
+          "sha256": "f84a8320f9907ecc355708a08a7f7dcdae9ada7617ea2edd0d3c5aa5c8d8e5c3",
+          "sha1": "a8f33dfd2ef0172c73c090cfc2db75c1c5202581",
+          "md5": "4407465bb07895c2dcc6b8d878259755"
+        }
+      ]
+    },
+    {
+      "name": "sourcesElements",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "kora-contract-1.3.0-sources.jar",
+          "url": "kora-contract-1.3.0-sources.jar",
+          "size": 61202,
+          "sha512": "b24febb5b35d3013046087050714ff49e4bf582f24733b61eef620eb692241863301b95d64d7d32a73c2e454986a997ccc5da92729613fe5e2b90166ad50c09a",
+          "sha256": "4f188492d83e187e5f4dc9cdd7a98a1b86b260df5c56cc82ca1039b00897986a",
+          "sha1": "cbb7a45d925145e918daa93334c8e51b80a35eb7",
+          "md5": "bbe76f3c5433cecb6cdc363ccc3d5199"
+        }
+      ]
+    }
+  ]
+}
