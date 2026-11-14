@@ -71,6 +71,18 @@ changes the server is stopped and bound again on the new one; when it disappears
 the listener starts by itself when Tailscale comes back. The port is the one in `TailnetConfig`; if it is taken the
 status is `Error` (no crash, no other port) and the next address change tries again.
 
+### Tool calls
+A tool is called over the tailnet with the settings it has over adb (`kora.mcp`), and the app does not repeat them:
+the limit for one call is the **call timeout of the node** handed to `install` (`KoraNode.callTimeout`, the
+`callTimeout` of `KoraAndroid.install`, 5 s by default), after which the tool answers a `timeout` error, and a tool
+argument or answer above 256 KiB is a `payload_too_large` error. The HTTP request around it keeps the limits of
+`kora-mcp-http`: 1 MiB for the body and 30 s for the answer, so a call timeout above 30 s ends in a `504` at 30 s.
+
+The listener keeps no state across the process, and an agent is not asked to connect again because of it: a request
+without `_meta` (a client of the handshake revisions) is served with or without a prior `initialize`, so after an
+auto-off, a process restart and the switch being turned on again its next `tools/call` works. The endpoint does not
+advertise `tools.listChanged`, since it has no stream to send the notification on.
+
 ### Foreground service, notification and auto-off
 `TailnetService` hosts the session while the switch is on. Each session has its own number and the service instance
 remembers the session it serves: if the service is destroyed for any reason while that session is on, the session ends

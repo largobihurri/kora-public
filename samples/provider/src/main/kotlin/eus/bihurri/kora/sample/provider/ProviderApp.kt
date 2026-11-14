@@ -31,7 +31,8 @@ const val TAG = "KoraSample"
 /**
  * Provides a fake music library with generated cover art and a fake player, to show what a peer app sees. It also
  * opens the node to the adb shell through [SampleExternalAccess] (see `content call` in the kora-android README)
- * and, through [TailnetSample], to paired agents over Tailscale (README, "Tailnet test").
+ * and, through [TailnetSample], to paired agents over Tailscale (README, "Tailnet test"). Its `files@1.0`
+ * ([SampleFiles]) serves the on-device stream checks (`samples/stream-checks.sh`).
  */
 class ProviderApp : Application() {
     private val playlists = listOf(
@@ -53,9 +54,12 @@ class ProviderApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        ShellArtworkGrant.load(this)
         node = KoraAndroid.install(
             this,
-            policy = DefaultCallerPolicy(SampleExternalAccess(isPairedAgent = ::isPairedAgent)),
+            policy = DefaultCallerPolicy(
+                SampleExternalAccess(isPairedAgent = ::isPairedAgent, shellArtworkGranted = ShellArtworkGrant::isGranted),
+            ),
             audit = AuditLog { Log.i(TAG, "audit $it") },
         ) {
             provideSampleCapabilities()
@@ -87,6 +91,10 @@ class ProviderApp : Application() {
         }
 
         provideSampleArtwork(artwork, ArtworkRenderer::renderPng)
+
+        provideSampleVolume()
+
+        provideSampleFiles(SampleFiles { Log.i(TAG, it) })
 
         provide(MediaPlayback) {
             on(MediaPlayback.Play) { update { it.copy(status = PlaybackStatus.PLAYING) } }

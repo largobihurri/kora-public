@@ -10,10 +10,13 @@ import eus.bihurri.kora.core.testing.provideStubbed
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -77,6 +80,42 @@ class McpArtworkResultTest {
         assertFalse(base64(image.bytes).take(32) in metadata, metadata)
         for (fact in listOf("image/jpeg", "1024x1024", "${MediaArtwork.MAX_ARTWORK_BYTES} bytes")) {
             assertTrue(fact in metadata, "'$fact' in '$metadata'")
+        }
+    }
+
+    @Test
+    fun `malformed artwork fields fall back to the JSON text block`() {
+        val valid = buildJsonObject {
+            put("bytes", "AAEC")
+            put("mimeType", "image/png")
+            put("widthPx", 3)
+            put("heightPx", 1)
+        }
+        val json = Json
+        assertEquals(listOf("image", "text"), ToolContent.Artwork.render(valid, json).map { it.jsonObject["type"]!!.jsonPrimitive.content })
+
+        val broken = listOf(
+            "bytes" to JsonPrimitive("not base64!"),
+            "bytes" to JsonPrimitive("AAE"),
+            "bytes" to JsonPrimitive(""),
+            "bytes" to JsonPrimitive(12),
+            "widthPx" to JsonPrimitive(0),
+            "heightPx" to JsonPrimitive(-1),
+            "mimeType" to JsonPrimitive("unknown"),
+        )
+        for ((key, value) in broken) {
+            val structured = JsonObject(valid + (key to value))
+            assertEquals(ToolContent.JsonText.render(structured, json), ToolContent.Artwork.render(structured, json), "$key=$value")
+        }
+    }
+
+    @Test
+    fun `the metadata byte count is exact for every Base64 padding`() = runTest {
+        for (size in 1..4) {
+            val image = ArtworkImage(ByteArray(size) { it.toByte() }, ArtworkMimeType.PNG, widthPx = size, heightPx = 1)
+            val metadata = parse(sessionServing(image).artworkAnswer()).content()[1]["text"]!!.jsonPrimitive.content
+
+            assertTrue("${size}x1 px, $size bytes" in metadata, metadata)
         }
     }
 

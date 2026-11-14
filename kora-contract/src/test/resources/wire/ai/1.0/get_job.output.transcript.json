@@ -1,0 +1,1 @@
+{"jobId":"job-3","task":"transcribe","state":"succeeded","engineId":"whisper-base","progressPercent":100,"createdAtEpochMs":1700000000000,"updatedAtEpochMs":1700000240000,"requestKey":null,"transcript":{"passageCount":412,"language":"es-ES"},"summary":null,"answer":null,"failure":null}

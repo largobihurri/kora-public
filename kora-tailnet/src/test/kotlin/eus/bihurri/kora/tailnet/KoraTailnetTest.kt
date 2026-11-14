@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import eus.bihurri.kora.contract.media.MediaLibrary
+import eus.bihurri.kora.contract.media.PlaylistSummary
 import eus.bihurri.kora.core.Caller
 import eus.bihurri.kora.core.CallerKind
 import eus.bihurri.kora.mcp.http.DenialReason
@@ -12,6 +13,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -31,7 +33,9 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import java.io.File
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 /** The public API of an app wiring: switch, pairings, grants, and the pieces it leaves to the service. */
 @RunWith(RobolectricTestRunner::class)
@@ -136,6 +140,47 @@ class KoraTailnetTest {
         val allowed = post("127.0.0.1", port, LIST_PLAYLISTS_CALL, issued.token, LIST_PLAYLISTS_HEADERS)
         assertEquals(200, allowed.status)
         assertTrue(allowed.body, "\"isError\":true" !in allowed.body && "pl-0" in allowed.body)
+    }
+
+    @Test
+    fun `a tool slower than the default gate timeout answers within the call timeout of the node`() {
+        // An app installed with `callTimeout = 20.seconds` whose tool takes longer than the 5 s a gate allows by default.
+        val slow = testNode(access, callTimeout = 20.seconds, listPlaylists = { delay(5_500); playlists })
+        KoraTailnet.install(app, slow, config(), source, scope, allowNonTailnetAddress = true)
+        source.initial = loopback
+        KoraTailnet.start()
+        val issued = KoraTailnet.pair("agent")
+        access.grants[issued.caller] = setOf(MediaLibrary.ReadScope)
+
+        val answer = post("127.0.0.1", port, LIST_PLAYLISTS_CALL, issued.token, LIST_PLAYLISTS_HEADERS, readTimeoutMs = 15_000)
+
+        assertEquals(200, answer.status)
+        assertTrue(answer.body, "\"isError\":false" in answer.body && "pl-0" in answer.body)
+    }
+
+    @Test
+    fun `tool arguments and answers above the size limit of the adb gate are refused`() {
+        val large = AtomicBoolean(false)
+        val name = "x".repeat(ADB_GATE_MAX_BYTES)
+        val node = testNode(access, listPlaylists = { if (large.get()) listOf(PlaylistSummary("big", name, 1)) else playlists })
+        KoraTailnet.install(app, node, config(), source, scope, allowNonTailnetAddress = true)
+        source.initial = loopback
+        KoraTailnet.start()
+        val issued = KoraTailnet.pair("agent")
+        access.grants[issued.caller] = setOf(MediaLibrary.ReadScope)
+        // The input ignores unknown keys, so only its size makes this call differ from the one that works.
+        val padded = LIST_PLAYLISTS_CALL.replace("\"limit\":2", "\"limit\":2,\"padding\":\"$name\"")
+
+        val request = post("127.0.0.1", port, padded, issued.token, LIST_PLAYLISTS_HEADERS)
+        large.set(true)
+        val response = post("127.0.0.1", port, LIST_PLAYLISTS_CALL, issued.token, LIST_PLAYLISTS_HEADERS)
+
+        assertEquals(200, request.status)
+        assertTrue(request.body.take(300), "\"isError\":true" in request.body)
+        assertTrue(request.body.take(300), "payload_too_large: Request exceeds $ADB_GATE_MAX_BYTES bytes" in request.body)
+        assertEquals(200, response.status)
+        assertTrue(response.body.take(300), "\"isError\":true" in response.body)
+        assertTrue(response.body.take(300), "payload_too_large: Response exceeds $ADB_GATE_MAX_BYTES bytes" in response.body)
     }
 
     @Test
@@ -247,3 +292,6 @@ class KoraTailnetTest {
         assertEquals(TailnetService::class.java.name, shadowOf(app).nextStartedService.component?.className)
     }
 }
+
+/** What the adb MCP gate of `kora-android` allows for one tool argument or answer (`PayloadLimits.MAX_ENVELOPE_BYTES`). */
+private const val ADB_GATE_MAX_BYTES = 256 * 1024

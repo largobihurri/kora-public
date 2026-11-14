@@ -13,7 +13,8 @@
 
         <!--
             Exported on purpose: the launcher and `adb shell am start` start it from another uid, which Android refuses for a
-            non-exported activity. It only runs read-only calls against this sample's stub data.
+            non-exported activity. It only runs calls against this sample's stub data (the only write sets the stub's
+            in-memory volume).
         -->
         <activity
             android:name=".CheckActivity"

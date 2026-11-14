@@ -115,7 +115,7 @@ class StreamEnvelopeRefusalTest {
 
     @Test
     fun `a bridge decides the refusal itself and sends nothing to the peer`() = runTest {
-        val transport = RecordingTransport()
+        val transport = SentRecordingTransport()
         val directory = object : PeerDirectory {
             override val peers: StateFlow<List<PeerInfo>> =
                 MutableStateFlow(listOf(PeerInfo(NodeDescriptor("files", "files", listOf(Blobs.descriptor())))))
@@ -160,7 +160,7 @@ class StreamEnvelopeRefusalTest {
 }
 
 /** A [StreamingPeerTransport] that records every request it is handed and answers plain calls with no output. */
-private class RecordingTransport : StreamingPeerTransport {
+private class SentRecordingTransport : StreamingPeerTransport {
     val sent = mutableListOf<String>()
 
     override suspend fun call(peer: PeerInfo, request: KoraRequest): KoraResponse {

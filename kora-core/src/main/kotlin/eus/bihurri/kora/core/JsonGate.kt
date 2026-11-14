@@ -36,9 +36,11 @@ import kotlin.time.Duration.Companion.seconds
  * ```
  *
  * `version` is optional and so is `input` (an empty object). With a `version`, the definition of that major is
- * used (a major the registry lacks is answered by the node, e.g. `incompatible_version`); without one, the call is made
- * at the newest built-in version of the capability, so a script that must keep its shape across a new major should
- * always send the `version` it was written for. Unknown
+ * used (a major the registry lacks is answered by the node, e.g. `incompatible_version`) and the provider is asked
+ * for exactly that version. Without one, the definition is the newest built-in version of the capability and the
+ * provider is asked for the version the operation exists since (`OperationSpec.since`), so an operation that exists
+ * since 1.0 is served by a provider at 1.0 even when the built-in capability is at 1.1. A script that must keep its
+ * shape across a new major should always send the `version` it was written for. Unknown
  * keys are ignored, like everywhere else in Kora. The answer is always one JSON object:
  *
  * ```
@@ -63,7 +65,8 @@ import kotlin.time.Duration.Companion.seconds
  * @param node the node to call.
  * @param codec the codec of the node's payloads; it must be the one [node] was built with.
  * @param timeout limit for one call; the answer is `timeout` when the handler takes longer. A call that times
- *   out is cancelled and, like any cancelled call, not audited.
+ *   out is cancelled and, like any cancelled call, not audited. A forwarded call ([forwardToPeers]) is also limited
+ *   by the node's own call timeout: when that one is shorter, the node answers `timeout` first and audits it.
  * @param maxRequestBytes largest accepted argument (UTF-8 bytes); above it the answer is `payload_too_large`.
  * @param maxResponseBytes largest answer (UTF-8 bytes); above it the answer is `payload_too_large`.
  * @param forwardToPeers when true, capabilities that only a peer offers are served too, through [KoraNode.dispatch]
@@ -163,7 +166,8 @@ public class JsonGate(
             registry.find(invocation.capability)
         }
         val spec = capability?.findOperation(invocation.operation)
-        val version = invocation.version ?: capability?.version ?: CapabilityVersion(1, 0)
+        // Without an explicit version the provider is asked for the version the operation exists since, like a typed call.
+        val version = explicit ?: spec?.since ?: capability?.version ?: CapabilityVersion(1, 0)
         if (spec == null) {
             val message = if (capability == null) "Capability '${invocation.capability}' is not available through JSON"
             else "Unknown operation '${invocation.operation}'"

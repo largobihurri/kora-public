@@ -1,0 +1,1 @@
+{"engines":[{"id":"gemma-2b","name":"Gemma 2B","kind":"on_device","tasks":["summarize_meeting","ask"],"available":true,"isDefault":true},{"id":"claude","name":"Claude","kind":"api","tasks":["summarize_meeting","ask"],"available":false,"isDefault":false},{"id":"whisper-base","name":"Whisper base","kind":"on_device","tasks":["transcribe"],"available":true,"isDefault":true}]}

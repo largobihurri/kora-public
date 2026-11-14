@@ -78,6 +78,11 @@ import java.util.concurrent.atomic.AtomicInteger
  * pairing that is revoked and later re-created under the same id starts with a fresh session, and a request that
  * was already in flight at revocation cannot bring the old one back.
  *
+ * Sessions live in memory only. A legacy client is not asked to `initialize` again after this process is restarted:
+ * a request without `_meta` is served as a legacy request whatever the handshake state ([McpSession]), under the
+ * caller its token proves. Nothing is streamed, so the sessions do not advertise `tools.listChanged`: a client calls
+ * `tools/list` again when it needs the current list.
+ *
  * ## Threads and failure
  * One acceptor thread, up to [McpHttpConfig.maxConnections] worker threads and as many handler threads (all daemon).
  * Each connection serves one request and closes. Watchdogs close connections that are too slow to send their head
@@ -551,8 +556,14 @@ public class McpHttpServer(
                 if (lookUp(auth.tokenHash)?.id != auth.pairing.id) return@run null
                 // A new token for this id (a pairing re-created after a revoke): the old session is not inherited.
                 sessions.keys.removeIf { it.pairingId == key.pairingId }
-                McpSession(node, Caller(CallerKind.REMOTE_AGENT, "$CALLER_PREFIX${key.pairingId}"), serverInfo, gate)
-                    .also { sessions[key] = it }
+                // Answers are plain JSON with no stream beside them, so list-changed notifications cannot be delivered.
+                McpSession(
+                    node,
+                    Caller(CallerKind.REMOTE_AGENT, "$CALLER_PREFIX${key.pairingId}"),
+                    serverInfo,
+                    gate,
+                    listChanged = false,
+                ).also { sessions[key] = it }
             }
         }
     }

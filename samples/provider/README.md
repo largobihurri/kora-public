@@ -7,8 +7,19 @@
 **Artwork.** Every track (`t-<n>`) and playlist carries an `artworkId` (`art-t-<n>`, `art-pl-1`, `art-pl-2`; opaque to
 consumers). `get_artwork` draws a flat-colour "record" PNG at `min(maxEdgePx, 640)` pixels, never upscaled, and steps
 the size down by a quarter while the PNG exceeds `MediaArtwork.MAX_ARTWORK_BYTES` (`SampleArtwork`; the handler,
-`provideSampleArtwork`, is JVM-tested through a node with a fake renderer; `ArtworkRenderer` draws on device). Any other id answers `invalid_payload`. The adb shell and every tailnet pairing are granted
-`media.artwork.read` (sample-only, see below).
+`provideSampleArtwork`, is JVM-tested through a node with a fake renderer; `ArtworkRenderer` draws on device). Any other id answers `invalid_payload`. The adb shell (while the switch below is on) and every tailnet pairing are
+granted `media.artwork.read` (sample-only, see below).
+
+## Artwork transport check
+
+**Refusal by the provider.** The screen's **Grant artwork to adb shell** switch (on by default, remembered in the
+sample's preferences) adds or removes `media.artwork.read` from the shell's grants at once, with no exported component.
+Switch it **off**, then with `kora-bridge --serial <serial> --package eus.bihurri.kora.sample.provider` (the `printf`
+pipeline of `samples/consumer/README.md`, with this package): `media_artwork__get_artwork` answers `isError`
+`unauthorized: Scope 'media.artwork.read' is not granted` and logcat (`-s KoraSample`) shows `accessDenied
+caller=shell scope=media.artwork.read`, while `media_library__list_playlists` still answers. Switch it on again to
+restore the grant. Tailnet pairings keep their grants (the switch is for the adb shell only). The Binder path is
+checked from `samples/consumer` and the watch path from `samples/wearcheck`.
 
 ## Tailnet test
 
@@ -43,7 +54,8 @@ stored by the library), it is never shown again, and it disappears with **Hide t
 listed with a **Revoke** button; the last refused requests (reason, address, time) are listed below.
 
 **Grants are sample-only.** The sample auto-grants every pairing all the scopes it provides
-(`media.library.read`, `media.artwork.read`, `media.playback.read`, `media.playback.control`) for as long as the pairing exists
+(`media.library.read`, `media.artwork.read`, `media.playback.read`, `media.playback.control`, `media.volume.read`,
+`media.volume.control`) for as long as the pairing exists
 (`SampleExternalAccess.TAILNET_AGENT_SCOPES`; it goes through the same `ExternalAccess.grantedScopes` the adb shell
 grant uses). A real app must not: a new pairing can do nothing until the user grants it scopes one by one (see
 `kora-tailnet/README.md`, "Grants").
@@ -112,3 +124,39 @@ requests do not count), the notification disappears and `curl` no longer connect
   itself when the address returns, still within the idle period.
 - The notification's **Stop** action and the switch both end the session.
 - The state does not survive a process death: after a restart the switch is off; pairings are kept.
+
+## Volume check
+
+The sample provides `media.volume` 1.0 from an in-memory volume (`SampleVolume`: 15 steps, starts at 7 of 15,
+unmuted; the device volume does not change). `set_volume` clamps to `0..15`, keeps mute when `muted` is omitted and
+applies ordered writes last-write-wins per caller through `WriteOrderGuard`; `volume_changed` emits every change. The
+adb shell and every tailnet pairing are granted `media.volume.read` and `media.volume.control` (sample-only, see
+`SampleExternalAccess`). JVM tests: `SampleVolumeTest`.
+
+Through `kora-bridge` (caller `shell`), after a fresh start of the app (the volume and the shell's writer live in the
+process: `adb -s <serial> shell am force-stop eus.bihurri.kora.sample.provider`, then start it again):
+
+```sh
+./gradlew :kora-bridge:installDist
+printf '%s\n' \
+  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"sh","version":"1"}}}' \
+  '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+  '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"media_volume__get_volume","arguments":{}}}' \
+  '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"media_volume__set_volume","arguments":{"level":40}}}' \
+  '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"media_volume__set_volume","arguments":{"level":3,"muted":true,"order":{"writer":"readme","sequence":2}}}}' \
+  '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"media_volume__set_volume","arguments":{"level":9,"order":{"writer":"readme","sequence":1}}}}' \
+  '{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"media_volume__set_volume","arguments":{"level":5,"muted":false}}}' \
+  | kora-bridge/build/install/kora-bridge/bin/kora-bridge --serial <serial> --package eus.bihurri.kora.sample.provider
+```
+
+| id | Expected `structuredContent` | Why |
+|---|---|---|
+| 2 | `{"level":7,"maxLevel":15,"muted":false}` | the start state |
+| 3 | `{"level":15,"maxLevel":15,"muted":false}` | no `order`: always applied; 40 is clamped to 15 |
+| 4 | `{"level":3,"maxLevel":15,"muted":true}` | first write of writer `readme`: applied |
+| 5 | `{"level":3,"maxLevel":15,"muted":true}` | sequence 1 is not greater than 2: not applied, the state is answered unchanged |
+| 6 | `{"level":5,"maxLevel":15,"muted":false}` | no `order` again: applied |
+
+Without the app restart, id 4 is refused too (writer `readme` already reached sequence 2); use another writer name
+instead. `adb logcat -s KoraSample` shows one `audit` line per call. Over the tailnet the same `tools/call` bodies work
+with `curl` (see "Valid token" above). The watch path is checked by `samples/wearcheck` ("Volume check").

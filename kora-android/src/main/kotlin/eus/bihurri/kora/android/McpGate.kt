@@ -25,15 +25,17 @@ import kotlin.time.Duration
  * worth knowing:
  * - Everything arriving through adb shares the one `shell` session. Two MCP clients on the same device and app see
  *   each other's `initialize`; use one client per app.
- * - Sessions live in memory. When the app process dies a legacy client has to `initialize` again (the answer to
- *   its next request says so); a client that sends the per-request metadata of the stateless revision is unaffected.
+ * - Sessions live in memory. When the app process dies the handshake state goes with it, and clients carry on
+ *   regardless: a legacy request without `_meta` is served with or without a handshake ([McpSession]), and a client
+ *   that sends the per-request metadata of the stateless revision never had one.
  * - Only external kinds are served ([McpSession.serves]): `SELF` and `PEER` already have the typed API and hold
  *   every scope, so an agent must not borrow them.
  *
  * Tools of peer capabilities are served too (`forwardToPeers`): the hosting node authorizes the caller first.
  * Requests and answers above [maxBytes] are refused with `payload_too_large` (see [PayloadLimits]); the handler of
  * a tool that does not answer within [timeout] is reported by the tool as `timeout`. Nothing here streams:
- * `subscriptions/listen` is answered `-32601` and server-initiated notifications are never delivered.
+ * `subscriptions/listen` is answered `-32601`, server-initiated notifications are never delivered, and the sessions
+ * therefore do not advertise `tools.listChanged`.
  *
  * ## Encoding of the argument and the answer
  * A JSON-RPC message begins with `{` or `[`, so an argument that begins with [KoraGate.PREFIX_BASE64] cannot be
@@ -76,7 +78,10 @@ internal class McpGate(
         }
         if (message.encodeToByteArray().size > maxBytes) return tooLarge("Request")
 
-        val entry = sessions.computeIfAbsent(caller) { Entry(McpSession(node, caller, serverInfo, gate)) }
+        // The gate answers one message per call and can send nothing else: no list-changed notifications.
+        val entry = sessions.computeIfAbsent(caller) {
+            Entry(McpSession(node, caller, serverInfo, gate, listChanged = false))
+        }
         val reply = entry.lock.withLock { entry.session.handle(message) } ?: return Answer.Reply(null, encoded)
         if (reply.encodeToByteArray().size > maxBytes) return tooLarge("Response")
         return Answer.Reply(if (encoded) encode(reply) else reply, encoded)

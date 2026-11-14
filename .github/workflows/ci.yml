@@ -18,5 +18,7 @@ jobs:
       - uses: ./.github/actions/setup-build
       - name: Test the release tag check
         run: .github/scripts/check-release-tag.test.sh
+      - name: Test the release-on-main check
+        run: .github/scripts/check-release-on-main.test.sh
       - name: Build and test
         run: ./gradlew build

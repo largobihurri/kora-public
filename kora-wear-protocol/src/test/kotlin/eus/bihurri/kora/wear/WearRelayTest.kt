@@ -34,10 +34,12 @@ import eus.bihurri.kora.core.testing.provideStubbed
 import eus.bihurri.kora.wear.testing.InMemoryWireLink
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.plus
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
@@ -108,7 +110,8 @@ class WearRelayTest {
 
     private fun TestScope.newRig(callTimeout: Duration = 5.seconds, relayTimeout: Duration = 10.seconds): Rig {
         val scope = backgroundScope
-        val phoneRelay = WearRelay(phoneLink, scope)
+        val phoneProcess = Job(scope.coroutineContext[Job])
+        val phoneRelay = WearRelay(phoneLink, scope + phoneProcess)
         val watchRelay = WearRelay(watchLink, scope, callTimeout = relayTimeout, describeTimeout = relayTimeout)
         val watch = KoraNode(
             "kardio",
@@ -120,10 +123,29 @@ class WearRelayTest {
         phoneEndpoint.connect(phone)
         val server = phoneRelay.serve(phone, counterpart)
         watchRelay.serve(watch, Caller(CallerKind.PEER, "wear:kardio"))
-        return Rig(watch, watchRelay, phoneRelay, server)
+        return Rig(watch, watchRelay, phoneRelay, server, phoneProcess)
     }
 
-    private class Rig(val watch: KoraNode, val watchRelay: WearRelay, val phoneRelay: WearRelay, val server: RelayServer)
+    private class Rig(
+        val watch: KoraNode,
+        val watchRelay: WearRelay,
+        val phoneRelay: WearRelay,
+        val server: RelayServer,
+        /** Everything the phone app runs; cancelled when [restartPhone] kills it. */
+        val phoneProcess: Job,
+    )
+
+    /**
+     * Kills the phone app and starts it again, as when Android reclaims a cached process and the next frame
+     * cold-starts it: the link stays up, the node is the same, the relay (and so its epoch) is new.
+     */
+    private fun TestScope.restartPhone(rig: Rig) {
+        rig.phoneProcess.cancel()
+        WearRelay(phoneLink, backgroundScope).serve(phone, counterpart)
+    }
+
+    /** The frames the watch sent, oldest first. */
+    private fun sentByWatch(): List<FrameBody> = watchLink.sent.map { (FrameCodec.read(it) as FrameReading.Valid).frame.body }
 
     @Test
     fun `nothing is sent until the watch asks for the phone's peers`() = runTest(UnconfinedTestDispatcher()) {
@@ -444,6 +466,69 @@ class WearRelayTest {
         phoneLink.send(raw(999, FrameBody.PeersChanged(emptyList()))) // a frame from a new phone process
 
         assertEquals(ErrorCode.PROVIDER_UNAVAILABLE, (failure as KoraException).error.code)
+    }
+
+    // ---- The frame that reveals a restart comes from the new process -----------------------------------------
+
+    @Test
+    fun `a call answered by a restarted phone completes with its result`() = runTest(UnconfinedTestDispatcher()) {
+        val rig = newRig()
+        rig.watchRelay.refresh()
+        restartPhone(rig)
+
+        val page = rig.watch.call(MediaLibrary.ListPlaylists, PageRequest(), Target.Peer("wear:sonora"))
+
+        assertEquals(playlists, page)
+        assertEquals(1, sentByWatch().count { it is FrameBody.Call }) // answered at once, not retried
+        assertEquals(1, sonoraAudit.entries.count { it.member == "list_playlists" })
+    }
+
+    @Test
+    fun `a peers answer from a restarted phone updates the directory and ends the requested refresh`() = runTest(UnconfinedTestDispatcher()) {
+        val rig = newRig()
+        rig.watchRelay.refresh()
+        restartPhone(rig)
+        sonoraEndpoint.disconnect() // nobody is told: the process that would have pushed the change is gone
+
+        rig.watchRelay.requestRefresh()
+        advanceUntilIdle()
+
+        assertEquals(listOf("wear:kardio"), rig.watch.peers.value.map { it.nodeId })
+        assertEquals(2, sentByWatch().count { it is FrameBody.DescribePeers }) // the answer was used, not asked for again
+
+        rig.watchRelay.requestRefresh() // not ignored: the previous one is over
+        advanceUntilIdle()
+
+        assertEquals(3, sentByWatch().count { it is FrameBody.DescribePeers })
+        assertEquals(listOf("wear:kardio"), rig.watch.peers.value.map { it.nodeId })
+    }
+
+    @Test
+    fun `a call the previous phone process never answered still fails when another answer reveals the restart`() = runTest(UnconfinedTestDispatcher()) {
+        val rig = newRig()
+        rig.watchRelay.refresh()
+        val release = CompletableDeferred<Page<PlaylistSummary>>()
+        listPlaylists = { release.await() }
+        val abandoned = async { runCatching { rig.watch.call(MediaLibrary.ListPlaylists, PageRequest()) } }
+        restartPhone(rig)
+
+        val answered = async { runCatching { rig.watch.call(MediaPlayback.GetState, NoInput) } }
+
+        assertEquals(ErrorCode.PROVIDER_UNAVAILABLE, (abandoned.await().exceptionOrNull() as KoraException).error.code)
+        assertEquals(PlaybackStatus.PLAYING, answered.await().getOrThrow().status)
+        release.complete(playlists)
+    }
+
+    @Test
+    fun `a restart revealed by an unrelated frame still empties the list and the directory asks again`() = runTest(UnconfinedTestDispatcher()) {
+        val rig = newRig()
+        rig.watchRelay.refresh()
+        watchLink.dropOutgoing = true // the question that follows is sent, and never answered
+
+        phoneLink.send(raw(999, FrameBody.Completed("unknown"))) // a frame from a new phone process
+
+        assertEquals(emptyList<String>(), rig.watch.peers.value.map { it.nodeId })
+        assertEquals(2, sentByWatch().count { it is FrameBody.DescribePeers })
     }
 
     @Test

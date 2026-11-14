@@ -132,6 +132,40 @@ Kardio's:
   `sensors-and-location/location/background`, `training/wearables/apps/power`; AOSP `ActiveServices.java`,
   `ForegroundServiceTypePolicy.java` (android16-release).
 
+### Volume consumer guidance (for the Kardio session)
+
+Kora defines `media.volume` 1.0 (`kora-contract/.../media/MediaVolume.kt`; first released in Kora 1.4.0):
+`get_volume`, `set_volume(level, muted?, order?)` and the event `volume_changed`, all carrying `VolumeState(level,
+maxLevel, muted)`. For the crown on the music page:
+- **Absolute levels.** Map rotation to an absolute level in `0..maxLevel` of the last state seen (never relative
+  steps). Past the ends is fine: the provider clamps and answers the applied state.
+- **Coalesce and order.** Accumulate crown ticks into a target level and send only the latest target. Every write
+  carries a `WriteOrder(writer, sequence)`: `writer` a random UUID per session (each app start, or each time the page
+  opens), `sequence` increasing with every write. Kora dispatches calls in parallel, so either keep one write in flight
+  (when it answers, send the newest target if it changed) or rely on the order: the provider applies only the newest
+  write of the current writer, and a replaced writer's late writes are ignored.
+- **Cold start.** When the music page opens, refresh the wear directory (`KoraWear.requestRefresh()`), then
+  `node.awaitProvider(MediaVolume, 5.seconds)` (or longer) before the first call, so it does not fail with
+  `provider_unavailable` while the phone's descriptor is still arriving. If it returns false, show the control as
+  unavailable and keep observing `availability(MediaVolume)`. Wait with the same target as the call: if the watch
+  app itself provides `media.volume`, an untargeted wait answers at once with the local one, so pass
+  `Target.Peer(<phone node id>)` to `awaitProvider` and to the calls.
+- **Keep a subscription.** Collect `volume_changed` while the page is visible: it starts with the current state, keeps
+  the link warm, and updates the UI when the volume changes on the phone (hardware buttons, other apps). Cancel it when
+  the page goes away.
+- **Echo.** While writes are in flight, show the local target and ignore `volume_changed` states that differ from it
+  (they are older writes coming back); once the last write has answered, adopt the provider's state.
+- **Scopes.** `media.volume.read` (`get_volume`, `volume_changed`) and `media.volume.control` (`set_volume`). The
+  watch is Sonora's counterpart (`PEER`), trusted by the default policy.
+- **Measured latency** (watch -> phone, `samples/wearcheck` steps `volume_latency` and `volume_event`): to be filled
+  from the device run.
+
+  | Measure | Value |
+  |---|---|
+  | `set_volume` round trip p50 / p95 / max (30 sequential) | _pending device run_ |
+  | `volume_changed` after `set_volume` (`eventMs`) | _pending device run_ |
+  | Cold: `peerWaitMs` + first `getMs` after a fresh start | _pending device run_ |
+
 ## Sonora
 
 | Worktree | Branch | State |
@@ -172,10 +206,36 @@ serves it with generated images and is the reference. A proposal, for the Sonora
 - **Tests.** Unknown id -> `invalid_payload`, a large cover is scaled to `maxEdgePx` and under the cap, a small cover is
   not upscaled, the refusal without `media.artwork.read`.
 
+### Volume port proposal (for the Sonora session)
+
+Kora defines `media.volume` 1.0 (`kora-contract/.../media/MediaVolume.kt`, binding rules in its KDoc; first released
+in Kora 1.4.0). Kardio's watch uses it to drive Sonora's volume from the crown. Proposal for Sonora's
+phone app:
+- **Which volume.** Either the music stream (`AudioManager.STREAM_MUSIC`): what the hardware buttons change and what
+  the user hears, with integer steps already (`getStreamMaxVolume`); or Sonora's player volume: independent of other
+  apps but a float that needs a mapping to steps (for instance 20) and does not follow the hardware buttons.
+  Recommendation: the music stream, so the crown and the buttons always agree.
+- **Steps.** Announce the steps as `maxLevel` (the stream's maximum) and report `level` as the current step.
+- **Set.** Clamp `request.level` to `0..maxLevel` (and to `getStreamMinVolume` if the device has a floor), apply it
+  without showing the system volume UI, and answer the applied `VolumeState`. `muted` null leaves mute unchanged; true
+  or false mutes or unmutes (`adjustStreamVolume` with `ADJUST_MUTE`/`ADJUST_UNMUTE`, `isStreamMute`), keeping the level.
+- **Order.** One `WriteOrderGuard<Caller>()` for the provider, and `set_volume` through
+  `applyInOrder(caller, request.order, apply = { ...; currentState() }, current = { currentState() })`, keyed by
+  `CallContext.caller`: writes without `order` always apply; ordered ones apply last-write-wins per writer session.
+- **Event.** Keep a `MutableStateFlow<VolumeState>` and `emits(MediaVolume.VolumeChanged) { state }`. Update it for
+  every change, not only Kora's writes: hardware buttons and other apps too (for instance a `ContentObserver` on
+  `Settings.System.CONTENT_URI` that re-reads the stream volume and mute; with Media3 device volume,
+  `Player.Listener.onDeviceVolumeChanged`). A new subscriber gets the current state first.
+- **Grants.** Two separate scopes: `media.volume.read` and `media.volume.control`. The counterpart watch (`PEER`) is
+  trusted; for external callers (other apps, adb shell, tailnet pairings) list them on the grant screen ("Volume",
+  "Change volume") and keep `media.volume.control` off until the user grants it.
+- **Tests.** Clamping above `maxLevel`; `muted` null keeps mute; a stale ordered write leaves the state unchanged; a
+  hardware button change is emitted; the refusal without `media.volume.control`. Reference provider:
+  `samples/provider/.../SampleVolume.kt` (in-memory, with tests).
+
 ## Oharrak
 
-Oharrak provides the organizer vocabulary of Kora `1.3.0` (proposed, not yet released; branch
-`claude/oharrak-vocabulary-527a5d`). The design is `docs/organizer-vocabulary.md`; what the provider module needs,
+Oharrak provides the organizer vocabulary of Kora `1.3.0` (released, tag `v1.3.0`). The design is `docs/organizer-vocabulary.md`; what the provider module needs,
 operation by operation, is `docs/organizer-handoff.md`.
 
 - Provide six capabilities at `1.0`: `reminders`, `calendar`, `notes`, `reminders.attachments`, `notes.attachments`
@@ -195,9 +255,43 @@ operation by operation, is `docs/organizer-handoff.md`.
   answer an upload within the caller's `streamIdleTimeout` of its last byte (an upload only stages the file).
 - Streams cross only Binder between apps on one phone (protocol 2). An app still on Kora `1.2` sees and calls a `1.3`
   app for everything that carries no stream.
-- Pending on a device: a descriptor passed over Binder is readable by the other app, closing a descriptor unblocks a
-  read or write blocked on it, and a pipe behaves when either process dies. The first upload and download between
-  Oharrak and KOKO on a phone is that check.
+- The Binder streams are checked on the emulator (API 36) with `samples/stream-checks.sh`: a file goes from one app to the other and
+  back byte for byte, a read or a write blocked on a pipe ends when the descriptor is closed (by the idle timeout or
+  by another thread), and a stream fails at once, rather than hanging, when the provider or the caller is killed
+  half way through. The first upload and download between Oharrak and KOKO on a phone confirms it on hardware.
+
+### AI consumer guidance (for the Oharrak session)
+
+Kora defines `ai` 1.0 (`kora-contract/.../ai/AiCapability.kt`, binding rules in its KDoc; first released in
+Kora 1.4.0). KOKO
+provides it; Oharrak's `KoraSummaryEngine` consumes it, and a KOKO-backed transcriber too (for phones without Android's
+on-device recognizer). Oharrak holds no model and no API key.
+
+- **Engines.** `ai.list_engines` answers `EngineList`: each `AiEngine` has `id`, `name`, `kind` (`ON_DEVICE`, `API`),
+  `tasks` (`TRANSCRIBE`, `SUMMARIZE_MEETING`, `ASK`), `available` and `isDefault`. Map it to `SummaryEngineOption`;
+  offer only the engines whose `tasks` hold the task in question. Keep the chosen `id` in the settings and send it as
+  `engineId` (null for KOKO's default). Treat `EngineKind.UNKNOWN` and `AiTask.UNKNOWN` as newer values.
+- **Transcription.** Stage the recording with `files.upload` of KOKO (`audio/wav`, 16-bit PCM, mono, 16 kHz; about
+  115 MB an hour; every provider takes at least 512 MiB) and start `transcribe(TranscribeRequest(audioFileId,
+  engineId?, language? such as "es-ES", fromMs, requestKey?))`. To go on after the passages Oharrak already has, send
+  `fromMs` = the end of the last one (stage the whole recording again; offsets still count from its start). Read the
+  passages with `get_transcript_passages(jobId, offset, limit ≤ 200)`, in pages, while the job runs, once it
+  succeeded and after it failed; `AiJob.transcript.passageCount` says how many there are so far. Each passage has
+  `startMs`, `endMs` and `text`, like Oharrak's `Passage`. `progressPercent` is set when KOKO can tell.
+- **Jobs, not calls.** `summarize_meeting` and `ask` answer at once with an `AiJob` in `QUEUED`; the summary arrives
+  later. Keep the `jobId` with the meeting (summary pending), then read it with `get_job` (on start and when the
+  meeting is shown) or subscribe to `job_changed` while Oharrak runs. `SUCCEEDED` carries `summary`
+  (`overview`, `decisions`, `actionItems`, the same shape as Oharrak's `Summary`) or `answer`; `FAILED` carries
+  `failure.reason`. Finished jobs are kept at least 24 hours; after that the id is `invalid_payload`, so ask again.
+- **Request keys.** Send `requestKey` (for example `"<meetingId>#<attempt>"`). After a `timeout`, send the same request
+  again: KOKO answers the job it already started. A failed or cancelled job is not reused for its key.
+- **Texts.** A transcript of up to 40 000 characters goes inline (`TextInput(text = ...)`). A longer one is staged
+  with `files.upload` of KOKO (`text/plain`, UTF-8) and named by `TextInput(fileId = ...)`. `ask` takes up to 100
+  documents whose inline texts together hold at most 40 000 characters; stage the rest.
+- **Grants.** `ai.read` (`list_engines`, `get_job`, `get_transcript_passages`, `job_changed`) and `ai.run`
+  (`transcribe`, `summarize_meeting`, `ask`, `cancel_job`), plus `files.write` to stage recordings and texts.
+- **Unavailable.** No provider of `ai` (KOKO not installed or not yet on this Kora) is `provider_unavailable`; map it to
+  `EngineUnavailable.UNREACHABLE` and keep the summary pending.
 
 ## KOKO
 
@@ -232,3 +326,35 @@ Oharrak, each with a `.read` and a `.write` scope; the design is `docs/organizer
   and attaches it with `notes.attachments.add`. Commanding Oharrak's recorder (`notes.recording`) is not in `1.3.0`;
   it is a later, additive capability whose design is redone to fit Oharrak's recorder.
 - Files cross only between apps on the phone: not over MCP, not to the watch.
+
+### AI provider guidance (for the KOKO session)
+
+Kora defines `ai` 1.0 (`kora-contract/.../ai/AiCapability.kt`, binding rules in its KDoc; first released in
+Kora 1.4.0). KOKO
+provides it for Oharrak's meeting mode (speech to text, summaries, questions), with its on-device models and its API
+engines; keys never leave KOKO.
+
+- **Atomic.** Register all seven operations and the event: `list_engines`, `transcribe`, `summarize_meeting`, `ask`,
+  `get_job`, `get_transcript_passages`, `cancel_job`, `job_changed`. Also provide `files` so callers can stage
+  recordings and long texts (upload only stages; a staged file is used by the one `ai` request that names it, and a
+  request refused before the job starts leaves it usable). Accept staged `audio/wav` (16-bit PCM, mono, 16 kHz) of at
+  least 512 MiB.
+- **Answer within the call timeout (5 s by default).** `list_engines` reads KOKO's engine registry without loading a
+  model. `transcribe`, `summarize_meeting` and `ask` only check the request, resolve the engine (an unknown id, or one that does not
+  run the task, is `invalid_payload`), store the job and answer it `QUEUED`; the work runs in a foreground service.
+- **Jobs.** Keep them per caller (`CallContext` names it): a job id from another caller is `invalid_payload`, and
+  `job_changed` shows a subscriber only its own jobs, first every job of its own KOKO keeps, then each change. Keep a
+  finished job and its result at least 24 hours. A job left unfinished when KOKO stopped ends `FAILED` with
+  `INTERRUPTED` unless KOKO resumes it.
+- **Request keys.** The same caller and `requestKey` while the job is kept answers that job, unless it failed or was
+  cancelled, in which case a new job starts.
+- **Results.** `MeetingSummary` and `answer` hold at most 20 000 characters each; shorten before answering. A
+  transcription keeps its passages in order with the job (offsets from the start of the recording, also after
+  `fromMs`), counts them in `AiJob.transcript`, and answers them in pages of at most `limit` and 20 000 characters;
+  serve the passages so far while it runs and those kept after it failed.
+- **Failures.** `ENGINE_UNAVAILABLE` (model missing, no key), `UNSUPPORTED_INPUT` (a format the engine does not
+  take, a damaged file), `INPUT_TOO_LARGE`, `NETWORK` (API unreachable or over
+  quota), `ENGINE_FAILED`, `INTERRUPTED`; the `message` is for logs only.
+- **Effects.** `list_engines`, `get_job` and `get_transcript_passages` are `READ`; `transcribe`, `summarize_meeting`,
+  `ask` and `cancel_job` are `WRITE` (they may spend API money). All are MCP tools, so an agent can use inline texts;
+  staging needs Binder.

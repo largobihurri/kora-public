@@ -34,6 +34,8 @@ the library version.
    ```
 
 5. The `release.yml` workflow then:
+   - fails unless the tagged commit is on `main` (`.github/scripts/check-release-on-main.sh`): a tag on a commit
+     that was never merged publishes nothing;
    - fails unless the tag without `v` equals the Gradle `version`;
    - runs `./gradlew build`;
    - publishes every library module as `eus.bihurri.kora:<module>:X.Y.Z` with sources and POM metadata

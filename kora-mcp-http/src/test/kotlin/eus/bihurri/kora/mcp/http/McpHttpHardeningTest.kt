@@ -301,7 +301,11 @@ class McpHttpHardeningTest {
             current?.takeIf { MessageDigest.isEqual(it.second, tokenHash) }?.first
     }
 
-    private val list = """{"jsonrpc":"2.0","id":2,"method":"tools/list"}"""
+    /**
+     * Shows whether a session has the legacy handshake: a request whose `_meta` has no protocol version is answered
+     * after `initialize` and `-32602` before it (one without `_meta` is served either way).
+     */
+    private val list = """{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{"_meta":{"progressToken":"p"}}}"""
     private val legacyHeaders = mapOf("MCP-Protocol-Version" to "2025-11-25")
 
     @Test

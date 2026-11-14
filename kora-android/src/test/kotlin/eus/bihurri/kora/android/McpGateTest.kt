@@ -117,11 +117,32 @@ class McpGateTest {
     }
 
     @Test
-    fun `a request before the handshake is told to initialize first`() = runTest {
-        val answer = gate().plain(shell, rpc(1, "tools/list"))!!
+    fun `a legacy request is served before the handshake, as it is after one`() = runTest {
+        // A fresh gate is what a legacy client meets after the app process was restarted: its session is gone.
+        val restarted = gate()
+        val handshaken = gate().also { it.handshake(shell) }
 
-        assertEquals(-32602, answer["error"]!!.jsonObject["code"]!!.jsonPrimitive.content.toInt())
-        assertTrue(answer["error"]!!.jsonObject["message"]!!.jsonPrimitive.content.contains("initialize first"))
+        val tools = restarted.plain(shell, rpc(2, "tools/list"))!!
+        val called = restarted.plain(shell, list)!!
+
+        assertEquals(handshaken.plain(shell, rpc(2, "tools/list")), tools)
+        assertEquals(handshaken.plain(shell, list), called)
+        assertTrue(tools.result()["tools"]!!.jsonArray.any { it.jsonObject["name"]!!.jsonPrimitive.content == "media_library__list_playlists" })
+        assertFalse(called.isError())
+        assertEquals("pl-1", called.result()["structuredContent"]!!.jsonObject["items"]!!.jsonArray[0].jsonObject["id"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `tools listChanged is not advertised, since nothing server-initiated crosses the gate`() = runTest {
+        val gate = gate()
+        val modern = """{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}"""
+
+        val initialize = gate.plain(shell, rpc(1, "initialize", """{"protocolVersion":"2025-11-25","capabilities":{}}"""))!!
+        val discover = gate.plain(shell, rpc(2, "server/discover", modern))!!
+
+        val noNotifications = Json.parseToJsonElement("""{"tools":{}}""")
+        assertEquals(noNotifications, initialize.result()["capabilities"])
+        assertEquals(noNotifications, discover.result()["capabilities"])
     }
 
     @Test
@@ -148,8 +169,11 @@ class McpGateTest {
         val gate = gate()
         gate.handshake(shell)
 
-        // The app never initialized, so its session refuses; the shell's handshake is not shared.
-        assertEquals(-32602, gate.plain(app, rpc(2, "tools/list"))!!["error"]!!.jsonObject["code"]!!.jsonPrimitive.content.toInt())
+        // The app never initialized, so its session refuses a request that needs the handshake (one whose `_meta`
+        // has no protocol version); the shell's handshake is not shared.
+        val needsHandshake = rpc(2, "tools/list", """{"_meta":{"progressToken":1}}""")
+        assertEquals(-32602, gate.plain(app, needsHandshake)!!["error"]!!.jsonObject["code"]!!.jsonPrimitive.content.toInt())
+        assertTrue(gate.plain(shell, needsHandshake)!!.containsKey("result"))
         gate.handshake(app)
         assertTrue(gate.plain(app, list)!!.isError())
         assertFalse(gate.plain(shell, list)!!.isError())

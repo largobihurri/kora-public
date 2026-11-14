@@ -96,7 +96,9 @@ public class KoraWear private constructor(
          * Creates the relay. Nothing touches the Data Layer until the first message is sent or received.
          *
          * @param callTimeout how long to wait for the other device to answer one call; it crosses two radios and
-         *   may start a cold app, so give nodes that call over it a `callTimeout` of the same order.
+         *   may start a cold app, so give nodes that call over it a `callTimeout` of the same order. The node on
+         *   the other device applies its own `callTimeout` to a call it forwards to another app there, so a slow
+         *   relayed operation needs that node's limit raised as well.
          * @throws IllegalStateException if called twice.
          */
         @JvmOverloads

@@ -68,9 +68,11 @@ public class McpTool internal constructor(
  * `files__download` are absent, `files__discard` is a tool). Events are not exposed: MCP tools are
  * request/response, and subscriptions are out of scope for this module.
  *
- * Tools are major-aware. Each tool belongs to one [Capability] (so to one version), and calling it sends that
- * capability's version. Names follow [McpTools.nameOf]: the plain `<capability>__<operation>` for major 0 or 1, and
- * `<capability>_v<major>__<operation>` from major 2, so a second major never changes the names of the first.
+ * Tools are major-aware. Each tool belongs to one [Capability] (so to one version), and calling it asks the provider
+ * for the version its operation exists since (`OperationSpec.since`), so the tool of an operation that exists since
+ * 1.0 works against a provider at 1.0 even when the capability is at 1.1 in the registry. Names follow
+ * [McpTools.nameOf]: the plain `<capability>__<operation>` for major 0 or 1, and `<capability>_v<major>__<operation>`
+ * from major 2, so a second major never changes the names of the first.
  */
 public class McpToolSet(
     /** The capability definitions the tools come from. */

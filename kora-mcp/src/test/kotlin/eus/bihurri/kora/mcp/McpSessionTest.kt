@@ -132,12 +132,22 @@ class McpSessionTest {
     }
 
     @Test
-    fun `a request before the handshake tells the client to initialize first`() = runTest {
-        // Transports that restart the session's process (the adb bridge) recognise this wording to replay the handshake.
-        val answer = parse(session().handle(rpc("tools/list")))
+    fun `a request whose _meta lacks the protocol version still needs the handshake`() = runTest {
+        // Only a request without `_meta` is served before `initialize`. Older bridges recognise this wording to replay
+        // the handshake.
+        val session = session()
+        val progress = parse("""{"_meta":{"progressToken":"p1"}}""")
 
-        assertEquals(-32602, answer.errorCode)
-        assertTrue((answer["error"] as JsonObject)["message"]!!.jsonPrimitive.content.contains("initialize first"))
+        val refused = parse(session.handle(rpc("tools/list", progress)))
+
+        assertEquals(-32602, refused.errorCode)
+        assertEquals(
+            "Missing _meta 'io.modelcontextprotocol/protocolVersion'; stateless clients send it on every request, " +
+                "others must call initialize first",
+            (refused["error"] as JsonObject)["message"]!!.jsonPrimitive.content,
+        )
+        session.handle(rpc("initialize", parse("""{"protocolVersion":"2025-11-25"}""")))
+        assertTrue(toolNames(parse(session.handle(rpc("tools/list", progress)))).isNotEmpty())
     }
 
     // ---- legacy handshake -------------------------------------------------------------------------------------
@@ -175,16 +185,6 @@ class McpSessionTest {
     }
 
     @Test
-    fun `tools are refused until initialize has run`() = runTest {
-        val session = session()
-        assertEquals(-32602, parse(session.handle(rpc("tools/list"))).errorCode)
-        assertEquals(-32602, parse(session.handle(rpc("tools/call", parse("""{"name":"media_library__list_playlists"}""")))).errorCode)
-
-        session.handle(rpc("initialize", parse("""{"protocolVersion":"2025-11-25"}""")))
-        assertTrue(toolNames(parse(session.handle(rpc("tools/list")))).isNotEmpty())
-    }
-
-    @Test
     fun `a legacy result carries no resultType`() = runTest {
         val result = parse(session().initialized().handle(rpc("tools/list"))).resultObject
         assertFalse("resultType" in result)
@@ -211,6 +211,17 @@ class McpSessionTest {
         assertEquals("Use the tools.", result["instructions"]!!.jsonPrimitive.content)
         assertEquals(0, result["ttlMs"]!!.jsonPrimitive.content.toInt())
         assertEquals("private", result["cacheScope"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `a session whose transport cannot notify does not advertise listChanged, in either era`() = runTest {
+        val session = McpSession(node, AGENT, SERVER_INFO, listChanged = false)
+
+        val initialize = parse(session.handle(rpc("initialize", parse("""{"protocolVersion":"2025-11-25"}""")))).resultObject
+        val discover = parse(session.handle(rpc("server/discover", withMeta()))).resultObject
+
+        assertEquals(parse("""{"tools":{}}"""), initialize["capabilities"])
+        assertEquals(parse("""{"tools":{}}"""), discover["capabilities"])
     }
 
     @Test

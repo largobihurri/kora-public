@@ -9,9 +9,44 @@ private fun requireSpecName(kind: String, name: String) {
     require(SPEC_NAME.matches(name)) { "Invalid $kind name '$name': expected lower snake_case" }
 }
 
+private fun requireSince(kind: String, name: String, since: CapabilityVersion, capabilityVersion: CapabilityVersion) {
+    require(since.major == capabilityVersion.major && since.minor <= capabilityVersion.minor) {
+        "Invalid 'since' $since of $kind '$name': expected major ${capabilityVersion.major} and at most $capabilityVersion"
+    }
+}
+
 /** Input of operations that take no parameters. Encodes as an empty object. */
 @Serializable
 public data object NoInput
+
+/**
+ * One member of a [Capability]: what an [OperationSpec] and an [EventSpec] have in common.
+ *
+ * A member has two versions. [capabilityVersion] is the version of the capability that declares it, the one the
+ * caller's app was built against. [since] is the version the member itself was added in, which is the version a
+ * request for it asks the provider for: a provider serves a member when its minor is at least the member's, so an
+ * app built against `x@1.1` keeps using the members that exist since 1.0 on a provider that is still at `x@1.0`.
+ */
+public sealed interface MemberSpec {
+    /** Capability that declares this member. */
+    public val capabilityId: CapabilityId
+
+    /** Version of the declaring capability, i.e. the version a typed caller is built against. */
+    public val capabilityVersion: CapabilityVersion
+
+    /**
+     * Capability version this member exists since: the oldest provider version that has it, and the version a
+     * request for it carries. Same major as [capabilityVersion] and never newer than it; `major.0` unless the member
+     * was added in a later minor.
+     */
+    public val since: CapabilityVersion
+
+    public val name: String
+
+    public val scope: Scope
+
+    public val description: String
+}
 
 /**
  * Whether a byte stream travels beside the envelope of an operation, and which way: see [OperationSpec.stream].
@@ -60,14 +95,14 @@ public enum class OperationEffect {
  */
 public class OperationSpec<I, O> internal constructor(
     /** Capability that declares this operation. */
-    public val capabilityId: CapabilityId,
+    override val capabilityId: CapabilityId,
     /** Version of the declaring capability, i.e. the version a typed caller is built against. */
-    public val capabilityVersion: CapabilityVersion,
-    public val name: String,
+    override val capabilityVersion: CapabilityVersion,
+    override val name: String,
     public val inputSerializer: KSerializer<I>,
     public val outputSerializer: KSerializer<O>,
-    public val scope: Scope,
-    public val description: String,
+    override val scope: Scope,
+    override val description: String,
     /**
      * Byte stream that travels beside the envelope, [StreamDirection.NONE] for an ordinary operation. Only
      * transports that carry streams can serve an operation with another direction; on every other path it fails
@@ -82,9 +117,12 @@ public class OperationSpec<I, O> internal constructor(
     public val effect: OperationEffect = OperationEffect.DESTRUCTIVE,
     /** True when the capability declared [effect] itself, false when it is the default of an overload without one. */
     internal val effectDeclared: Boolean = false,
-) {
+    /** Capability version this operation exists since, which a call asks for; see [MemberSpec.since]. */
+    override val since: CapabilityVersion = CapabilityVersion(capabilityVersion.major, 0),
+) : MemberSpec {
     init {
         requireSpecName("operation", name)
+        requireSince("operation", name, since, capabilityVersion)
     }
 
     public fun encodeInput(codec: KoraCodec, input: I): ByteArray = codec.encode(inputSerializer, input)
@@ -101,16 +139,19 @@ public class OperationSpec<I, O> internal constructor(
 /** Typed description of one event a [Capability] can push to subscribers. */
 public class EventSpec<E> internal constructor(
     /** Capability that declares this event. */
-    public val capabilityId: CapabilityId,
+    override val capabilityId: CapabilityId,
     /** Version of the declaring capability, i.e. the version a typed subscriber is built against. */
-    public val capabilityVersion: CapabilityVersion,
-    public val name: String,
+    override val capabilityVersion: CapabilityVersion,
+    override val name: String,
     public val serializer: KSerializer<E>,
-    public val scope: Scope,
-    public val description: String,
-) {
+    override val scope: Scope,
+    override val description: String,
+    /** Capability version this event exists since, which a subscription asks for; see [MemberSpec.since]. */
+    override val since: CapabilityVersion = CapabilityVersion(capabilityVersion.major, 0),
+) : MemberSpec {
     init {
         requireSpecName("event", name)
+        requireSince("event", name, since, capabilityVersion)
     }
 
     public fun encode(codec: KoraCodec, event: E): ByteArray = codec.encode(serializer, event)
@@ -129,6 +170,11 @@ public class EventSpec<E> internal constructor(
  * A capability is an atomic contract: a node that provides it implements **every** operation and event it declares
  * (`KoraNode.provide` rejects partial registrations), so a peer that sees `id@version` in a descriptor can rely on
  * all of them. Optional features belong in separate capabilities, not in optional members.
+ *
+ * A member added in a minor version is declared with `since` set to that version (`since = CapabilityVersion(1, 1)`);
+ * every other member exists since `major.0`. Callers ask a provider for the member's `since`, not for [version], so
+ * raising the minor does not cut an updated app off from providers that still have the previous one
+ * ([MemberSpec.since]).
  */
 public abstract class Capability(
     public val id: CapabilityId,
@@ -148,6 +194,9 @@ public abstract class Capability(
     /**
      * Declares an operation with its [effect] and, when one travels beside its envelope, the direction of its byte
      * [stream]. Call only while initialising the capability object. Every built-in operation is declared this way.
+     *
+     * @param since the capability version the operation was added in, when that is not `major.0`. It must have the
+     *   major of [version] and must not be newer than it, otherwise this throws `IllegalArgumentException`.
      */
     protected fun <I, O> operation(
         name: String,
@@ -157,12 +206,16 @@ public abstract class Capability(
         description: String,
         effect: OperationEffect,
         stream: StreamDirection = StreamDirection.NONE,
-    ): OperationSpec<I, O> = register(name, input, output, scope, description, stream, effect, effectDeclared = true)
+        since: CapabilityVersion = CapabilityVersion(version.major, 0),
+    ): OperationSpec<I, O> =
+        register(name, input, output, scope, description, stream, effect, effectDeclared = true, since = since)
 
     /**
      * Declares an operation without a byte stream and without an effect, which is then
      * [OperationEffect.DESTRUCTIVE] (see [OperationSpec.effect]). Kept for capabilities written before effects
      * existed; prefer the overload that takes an effect. Call only while initialising the capability object.
+     *
+     * @param since as in the overload that takes an effect.
      */
     protected fun <I, O> operation(
         name: String,
@@ -170,12 +223,15 @@ public abstract class Capability(
         output: KSerializer<O>,
         scope: Scope,
         description: String,
-    ): OperationSpec<I, O> = operation(name, input, output, scope, description, StreamDirection.NONE)
+        since: CapabilityVersion = CapabilityVersion(version.major, 0),
+    ): OperationSpec<I, O> = operation(name, input, output, scope, description, StreamDirection.NONE, since)
 
     /**
      * Declares an operation whose byte stream travels in direction [stream] beside its envelope, without an effect,
      * which is then [OperationEffect.DESTRUCTIVE] (see [OperationSpec.effect]). Kept for capabilities written before
      * effects existed; prefer the overload that takes an effect. Call only while initialising the capability object.
+     *
+     * @param since as in the overload that takes an effect.
      */
     protected fun <I, O> operation(
         name: String,
@@ -184,8 +240,10 @@ public abstract class Capability(
         scope: Scope,
         description: String,
         stream: StreamDirection,
-    ): OperationSpec<I, O> =
-        register(name, input, output, scope, description, stream, OperationEffect.DESTRUCTIVE, effectDeclared = false)
+        since: CapabilityVersion = CapabilityVersion(version.major, 0),
+    ): OperationSpec<I, O> = register(
+        name, input, output, scope, description, stream, OperationEffect.DESTRUCTIVE, effectDeclared = false, since = since,
+    )
 
     private fun <I, O> register(
         name: String,
@@ -196,21 +254,28 @@ public abstract class Capability(
         stream: StreamDirection,
         effect: OperationEffect,
         effectDeclared: Boolean,
+        since: CapabilityVersion,
     ): OperationSpec<I, O> {
         require(findOperation(name) == null) { "Duplicate operation '$name' in capability '$id'" }
-        return OperationSpec(id, version, name, input, output, scope, description, stream, effect, effectDeclared)
+        return OperationSpec(id, version, name, input, output, scope, description, stream, effect, effectDeclared, since)
             .also { registeredOperations += it }
     }
 
-    /** Declares an event. Call only while initialising the capability object. */
+    /**
+     * Declares an event. Call only while initialising the capability object.
+     *
+     * @param since the capability version the event was added in, when that is not `major.0`. It must have the major
+     *   of [version] and must not be newer than it, otherwise this throws `IllegalArgumentException`.
+     */
     protected fun <E> event(
         name: String,
         serializer: KSerializer<E>,
         scope: Scope,
         description: String,
+        since: CapabilityVersion = CapabilityVersion(version.major, 0),
     ): EventSpec<E> {
         require(findEvent(name) == null) { "Duplicate event '$name' in capability '$id'" }
-        return EventSpec(id, version, name, serializer, scope, description).also { registeredEvents += it }
+        return EventSpec(id, version, name, serializer, scope, description, since).also { registeredEvents += it }
     }
 
     /** Advertisement of this capability for discovery. */

@@ -68,9 +68,12 @@ HTTP error bodies are JSON-RPC errors with `id: null`, which the specification a
 Choices where the specification leaves room:
 - **No sessions.** `Mcp-Session-Id` is optional in `2025-11-25` and removed in `2026-07-28`; the server never issues
   one and ignores one that arrives. The legacy handshake state lives in the pairing's `McpSession`, so two clients
-  sharing a pairing share it: give each agent its own pairing.
+  sharing a pairing share it: give each agent its own pairing. That state is in memory only, and a legacy client is
+  not asked for it again: a request without `_meta` is served as a legacy request with or without a prior
+  `initialize`, so a client keeps working after the server process is restarted.
 - **JSON only, no SSE.** `GET` is `405`, as both revisions allow. `subscriptions/listen` and MCP change
-  notifications are therefore unavailable over HTTP; clients call `tools/list` again when they need it.
+  notifications are therefore unavailable over HTTP, and neither `initialize` nor `server/discover` advertises
+  `tools.listChanged`; clients call `tools/list` again when they need it.
 - **Versions.** A request whose `_meta` carries `io.modelcontextprotocol/protocolVersion` is stateless-era and needs
   the matching `MCP-Protocol-Version`, `Mcp-Method` and (for `tools/call`) `Mcp-Name` headers. A legacy client may send
   the header with its negotiated version or omit it (`initialize` carries none). `2025-03-26` is not served, so it is
@@ -111,6 +114,11 @@ gets a new id.
 The bound address is always accepted in `Host`. To let clients use the phone's MagicDNS name
 (`<device>.<tailnet>.ts.net`), put it in `allowedHosts`; a port in the request must be the one the server listens on.
 Hooks run on the connection's thread before the answer is sent; record and return, and de-duplicate `onDenied`.
+
+Tools are called through a `JsonGate`. The default one (`gate` left out) allows 5 s per call and puts no limit on
+the size of a tool argument or answer; pass `gate = JsonGate(node, timeout = ..., maxRequestBytes = ...,
+maxResponseBytes = ..., forwardToPeers = true)` to choose them, as `:kora-tailnet` does with the node's call timeout
+and the limits of the adb gate.
 
 ## Connecting Claude Code
 ```bash

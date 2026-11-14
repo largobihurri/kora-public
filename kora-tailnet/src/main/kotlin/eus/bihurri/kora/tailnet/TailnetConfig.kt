@@ -7,7 +7,8 @@ import kotlin.time.Duration
 
 /**
  * What the app decides about its tailnet listener. Everything else (limits, timeouts, the checks on `Origin` and
- * `Host`) uses the safe defaults of [McpHttpConfig]; production never relaxes the bind-address check.
+ * `Host`) uses the safe defaults of [McpHttpConfig]; production never relaxes the bind-address check. How long a tool
+ * may take is not set here: it is the call timeout of the node handed to [KoraTailnet.install].
  *
  * @param port the TCP port to listen on, fixed so that the URL an agent is configured with stays valid across
  *   restarts. Pick one that is unlikely to clash (above 1024); if it is taken the status is

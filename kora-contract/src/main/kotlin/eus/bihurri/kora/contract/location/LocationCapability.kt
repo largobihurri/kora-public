@@ -63,7 +63,8 @@ public data class StreamConfig(public val intervalMs: Long, public val maxLatenc
  * - 1.0: [GetLastFix] and [FixChanged] (one message per fix).
  * - 1.1: [ConfigureStream] and [FixesBatched] (additive). A provider of 1.1 provides every member, as the atomic
  *   capability rule requires, so a peer that sees `location@1.1` can rely on all four. A 1.0 consumer keeps using the
- *   1.0 members of a 1.1 provider unchanged; a 1.1 consumer needs a 1.1 provider.
+ *   1.0 members of a 1.1 provider unchanged. A 1.1 consumer uses [GetLastFix] and [FixChanged] on any 1.x provider
+ *   and needs a 1.1 provider only for the two members declared `since` 1.1.
  *
  * ## Batching
  * [FixChanged] sends one message per fix, which is too chatty over a radio link (a phone feeding a watch). A consumer
@@ -110,6 +111,7 @@ public object LocationCapability : Capability(CapabilityId("location"), Capabili
         effect = OperationEffect.READ,
         description = "Set how often fixes are produced and how long they may wait before delivery for the " +
             "fixes_batched subscriptions this caller opens next. Answers the values the provider granted.",
+        since = CapabilityVersion(1, 1),
     )
 
     public val FixesBatched: EventSpec<LocationFixBatch> = event(
@@ -118,5 +120,6 @@ public object LocationCapability : Capability(CapabilityId("location"), Capabili
         scope = ReadScope,
         description = "Several position fixes at once, ordered and without repeats; the provider sends a batch at " +
             "least every granted max latency while fixes arrive.",
+        since = CapabilityVersion(1, 1),
     )
 }

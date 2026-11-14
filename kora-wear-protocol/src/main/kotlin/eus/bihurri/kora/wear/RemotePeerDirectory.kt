@@ -29,7 +29,9 @@ import kotlin.time.Duration.Companion.seconds
  * can wake the other device's app. Ask when the user is about to need the other device (opening the music page,
  * starting a recording). Once asked, the directory follows the counterpart by itself: it applies the
  * `peers_changed` pushes, empties on a link loss, and asks again when the link comes back or the counterpart app
- * restarted. Before the first [refresh] none of that costs anything.
+ * restarted. A restart empties the list too, unless the frame that revealed it is the answer to a [refresh] in
+ * flight: that answer already comes from the new process, so it is applied and nothing is asked again. Before the
+ * first [refresh] none of that costs anything.
  *
  * @param describeTimeout how long [refresh] waits for the answer.
  * @param maxPeers peers kept from one answer; the rest is ignored (a counterpart cannot flood this node).
@@ -53,18 +55,21 @@ public class RemotePeerDirectory(
     init {
         require(describeTimeout.isPositive()) { "describeTimeout must be positive: $describeTimeout" }
         scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            var restarted = false
             link.events.collect { event ->
                 when (event) {
-                    is LinkEvent.Received -> receive(event.body)
+                    is LinkEvent.Received -> {
+                        if (restarted) {
+                            restarted = false
+                            onRestart(event.body)
+                        }
+                        receive(event.body)
+                    }
                     LinkEvent.Lost -> {
                         failAnswers()
                         state.value = emptyList()
                     }
-                    LinkEvent.CounterpartRestarted -> {
-                        failAnswers()
-                        state.value = emptyList()
-                        refreshInBackground()
-                    }
+                    LinkEvent.CounterpartRestarted -> restarted = true // handled with the frame that revealed it, which follows
                     LinkEvent.Reconnected -> refreshInBackground()
                 }
             }
@@ -118,6 +123,20 @@ public class RemotePeerDirectory(
         }
     }
 
+    /**
+     * The counterpart app restarted and [first] is the first frame of its new process. Questions only the old
+     * process received will never be answered, so they fail and the list is asked for again; when [first] itself
+     * answers a question in flight, that question stays, and its answer is the list of the new process.
+     */
+    private fun onRestart(first: FrameBody) {
+        val answered = (first as? FrameBody.Peers)?.id?.takeIf { answers.containsKey(it) }
+        failAnswers(answered)
+        if (answered == null) {
+            state.value = emptyList()
+            refreshInBackground()
+        }
+    }
+
     private fun receive(body: FrameBody) {
         when (body) {
             is FrameBody.Peers -> answers[body.id]?.complete(body.nodes)
@@ -135,9 +154,10 @@ public class RemotePeerDirectory(
             .sortedBy { it.nodeId }
     }
 
-    private fun failAnswers() {
+    /** Fails every question in flight, except the one with id [answered]. */
+    private fun failAnswers(answered: String? = null) {
         for ((id, answer) in answers) {
-            if (answers.remove(id, answer)) answer.completeExceptionally(unavailable("The counterpart device is no longer reachable"))
+            if (id != answered && answers.remove(id, answer)) answer.completeExceptionally(unavailable("The counterpart device is no longer reachable"))
         }
     }
 

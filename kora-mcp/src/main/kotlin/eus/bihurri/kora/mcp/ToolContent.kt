@@ -10,6 +10,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.put
 
 /**
@@ -44,28 +45,37 @@ internal sealed interface ToolContent {
      * form MCP expects (`BytesSerializer`). An image block needs a real image MIME type, so when the type is
      * [ArtworkMimeType.UNKNOWN] (a newer provider's encoding this version cannot name) the result falls back to
      * [JsonText]: the agent still gets the bytes and dimensions, with `"mimeType":"unknown"`, and the answer still
-     * holds the Base64 twice (the text and `structuredContent`), so it fits the same limit. Output that does not
-     * decode as an [ArtworkImage] falls back to [JsonText] too; the gate only produces valid ones.
+     * holds the Base64 twice (the text and `structuredContent`), so it fits the same limit. Output without the
+     * [ArtworkImage] fields falls back to [JsonText] too; the gate only produces valid ones.
+     *
+     * The metadata is read from the JSON fields, and the byte count derived from the Base64 length, so the image is
+     * never decoded just to describe it. The fields are still checked: non-empty padded standard Base64, a known MIME
+     * type and positive dimensions, or the result falls back to [JsonText].
      */
     data object Artwork : ToolContent {
         override fun render(structured: JsonElement, json: Json): JsonArray {
-            val image = try {
-                json.decodeFromJsonElement(ArtworkImage.serializer(), structured)
-            } catch (_: IllegalArgumentException) {
-                return JsonText.render(structured, json)
-            }
-            val data = (structured as JsonObject)["bytes"]
-            if (image.mimeType == ArtworkMimeType.UNKNOWN || data !is JsonPrimitive) return JsonText.render(structured, json)
-            val type = image.mimeType.wireName
+            val fields = structured as? JsonObject ?: return JsonText.render(structured, json)
+            val data = (fields["bytes"] as? JsonPrimitive)?.takeIf { it.isString && PADDED_BASE64.matches(it.content) }
+            val type = (fields["mimeType"] as? JsonPrimitive)?.takeIf { it.isString }?.content
+                ?.takeIf { wire -> ArtworkMimeType.entries.any { it != ArtworkMimeType.UNKNOWN && it.wireName == wire } }
+            val width = (fields["widthPx"] as? JsonPrimitive)?.intOrNull?.takeIf { it > 0 }
+            val height = (fields["heightPx"] as? JsonPrimitive)?.intOrNull?.takeIf { it > 0 }
+            if (data == null || type == null || width == null || height == null) return JsonText.render(structured, json)
             val imageBlock = buildJsonObject {
                 put("type", "image")
                 put("data", data)
                 put("mimeType", type)
             }
-            val metadata = "Artwork $type, ${image.widthPx}x${image.heightPx} px, ${image.bytes.size} bytes " +
+            val metadata = "Artwork $type, ${width}x$height px, ${decodedSize(data.content)} bytes " +
                 "(Base64 in the image block and in structuredContent.bytes)."
             return JsonArray(listOf(imageBlock, textBlock(metadata)))
         }
+
+        /** Non-empty padded standard Base64, the `BytesSerializer` form; anything else falls back to [JsonText]. */
+        private val PADDED_BASE64 = Regex("(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{4})")
+
+        /** The byte count of [base64], already checked against [PADDED_BASE64], without decoding it. */
+        private fun decodedSize(base64: String): Int = base64.length / 4 * 3 - base64.takeLast(2).count { it == '=' }
     }
 
     companion object {

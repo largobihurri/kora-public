@@ -9,9 +9,21 @@ versioned and backward compatible, so nobody has to update at the same time.
 
 ## Rules
 
-1. **Capabilities are versioned `major.minor`.** A call is accepted when the majors match and the provider's minor is
-   at least the caller's (`CapabilityVersion.isCompatibleWith`). A 1.1 app can use every 1.0 member of a 1.0 peer;
-   it uses 1.1 members only after checking `node.availability(...)` / `providers(...)` for a 1.1 provider.
+1. **Capabilities are versioned `major.minor`, and every member records the version it exists since.** An operation
+   or event spec carries `since` (`MemberSpec.since`): `major.0`, unless the member was added in a later minor and
+   says so (`since = CapabilityVersion(1, 1)`). A request asks for the version of the member it names, not for the
+   version of the capability the caller was built against, and it is accepted when the majors match and the
+   provider's minor is at least the requested one (`CapabilityVersion.isCompatibleWith`). So a 1.1 app can use every
+   1.0 member of a 1.0 peer, and a member added in 1.1 is refused with `incompatible_version` until a 1.1 provider
+   exists. Typed calls (`KoraNode.call`, and the stream calls `callSending` and `callReceiving`), subscriptions
+   (`KoraNode.events`), the JSON gate when no `version` is given and MCP tools all ask for the member's version.
+   - To check before using a member, ask for that member: `node.isAvailable(spec)`, `availability(spec)`,
+     `providers(spec)` and `awaitProvider(spec, timeout)` answer for one operation or event. The same functions with
+     a `Capability` answer for all of it: a capability at 1.1 is available only from a 1.1 provider.
+   - Kora up to 1.3.0 asked for the capability version in every request. Such an app is served as before by any
+     provider at least as new as the capability it was built against, and as a provider it applies the same rule
+     to the requests of newer apps. The envelope is unchanged; only the `version` value a newer caller writes for
+     an older member differs.
 2. **Minor versions only add.** New optional fields (with defaults), new operations, new events, new enum constants.
    Never remove, rename, retype or change the meaning of anything in a minor version.
 3. **Readers are tolerant.** Decoders ignore unknown fields; wire enums decode unknown constants as `UNKNOWN`.
@@ -108,6 +120,9 @@ fixtures its release stored; keep that in mind before relaxing them.
 
 1. Finish the contract change. A capability that gained members or fields gets its **minor** bumped
    (`Capability(id, CapabilityVersion(1, 2))`); a breaking change is a new major provided next to the old one.
+   Declare every new operation and event with `since` set to the new version (`since = CapabilityVersion(1, 2)`) and
+   leave the existing members as they are: without it a provider still at the previous minor would be asked for a
+   member it does not have and answer `unknown_operation` instead of `incompatible_version`.
    Update the version history in the capability's KDoc.
 2. Bump `version` in the root `build.gradle.kts` (this is `KoraBuild.VERSION`, the only place the version is written).
 3. Add samples for new members and for the new shapes of changed types in `WireSamples` (the coverage test names what

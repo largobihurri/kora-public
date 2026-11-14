@@ -112,7 +112,8 @@ class ForwardToleranceTest {
         val fix = phone.call(LocationCapability.GetLastFix, NoInput)
 
         assertEquals(LocationFix(43.26, -2.93, null, 4.5, 99), fix)
-        assertEquals(CapabilityVersion(1, 1), peer.requests.single().version) // the caller still asks for what it knows
+        // The caller asks for the version the member exists since, not for the provider's newer minor.
+        assertEquals(CapabilityVersion(1, 0), peer.requests.single().version)
         assertEquals(listOf("watch"), phone.providers(LocationCapability))
     }
 

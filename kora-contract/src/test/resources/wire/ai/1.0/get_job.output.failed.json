@@ -1,0 +1,1 @@
+{"jobId":"job-1","task":"summarize_meeting","state":"failed","engineId":"gemma-2b","progressPercent":null,"createdAtEpochMs":1700000000000,"updatedAtEpochMs":1700000002000,"requestKey":"meeting-7#1","transcript":null,"summary":null,"answer":null,"failure":{"reason":"engine_unavailable","message":"Model not downloaded"}}

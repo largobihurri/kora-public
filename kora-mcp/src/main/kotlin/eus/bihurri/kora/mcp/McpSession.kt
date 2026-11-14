@@ -47,7 +47,8 @@ private const val MAX_ECHO = 80
 /**
  * One MCP connection (a stdio process, or an HTTP session) served by a [KoraNode]: JSON-RPC in, JSON-RPC out,
  * with no transport inside. A transport reads a message, calls [handle] (or [serve] when it can stream) and writes
- * the answer; it also forwards [notifications] while the legacy handshake is complete.
+ * the answer; one that can send messages of its own also forwards [notifications] while the legacy handshake is
+ * complete, and one that cannot says so with `listChanged = false`.
  *
  * ## What it serves
  * `initialize` and `notifications/initialized` (legacy), `server/discover` (modern), `ping`, `tools/list` with
@@ -58,10 +59,13 @@ private const val MAX_ECHO = 80
  *
  * ## Tools
  * The tools are [McpTools] of the built-in capabilities the node can reach right now (provided by the node itself or
- * by a compatible peer), so the list changes when a peer joins or leaves. `tools/list` does not depend on the
+ * by a compatible peer), so the list changes when a peer joins or leaves. Reachability is decided per operation: a
+ * provider at an older minor than the built-in capability offers the tools of the operations that exist since its
+ * version, and the tools of newer operations are left out. `tools/list` does not depend on the
  * caller: the catalogue is the same for every agent, and the caller's grants are enforced when a tool is called.
- * A tool that is known but not reachable answers `provider_unavailable` as a tool error. An operation that carries a
- * byte stream (`files.upload`, `files.download`) is not a tool ([McpToolSet]), so calling its name is an unknown tool.
+ * A tool that is known but not reachable answers `provider_unavailable` as a tool error (`incompatible_version` when
+ * a provider exists but is older than the operation). An operation that carries a byte stream (`files.upload`,
+ * `files.download`) is not a tool ([McpToolSet]), so calling its name is an unknown tool.
  *
  * A successful result carries the output as `structuredContent` and, in `content`, one `text` block with the same
  * JSON, except for artwork, which is an `image` block plus a metadata text ([ToolContent]).
@@ -77,16 +81,25 @@ private const val MAX_ECHO = 80
  *
  * ## Errors
  * Protocol failures are JSON-RPC errors: `-32700` parse, `-32600` invalid request, `-32601` unknown method,
- * `-32602` invalid params (including an unknown tool and a request that lacks the required `_meta`), `-32603`
+ * `-32602` invalid params (including an unknown tool and a `_meta` that lacks what its era requires), `-32603`
  * internal, `-32022` for a protocol version this server does not speak. Failures of the tool itself are tool results
  * with `isError: true` and a text such as `unauthorized: Scope 'media.library.read' is not granted`.
  *
  * ## Which era a request belongs to
  * A request whose `_meta` carries `io.modelcontextprotocol/protocolVersion` is served statelessly, as the modern
- * revision defines. Any other request needs a completed `initialize` on this session; before that it is rejected
- * with `-32602`, which is also what the modern revision prescribes for a request that lacks its `_meta`. `ping` and
+ * revision defines.
+ *
+ * A request without `_meta` is a legacy request and is served as one whether or not `initialize` has run on this
+ * session, with the answer it gets after a handshake. Sessions live in the memory of the serving process and a legacy
+ * client does not repeat its handshake on its own, so requiring one would leave the client of a restarted process
+ * failing until someone reconnects it. Nothing is lost by serving it: [caller] is fixed by the transport and the
+ * handshake never carried identity or grants.
+ *
+ * A request that does carry `_meta`, but without the protocol version, is legacy once `initialize` has run and is
+ * rejected with `-32602` before that, which is what the modern revision prescribes for a request that lacks its
+ * required metadata. `server/discover` and `subscriptions/listen` always need the modern `_meta`. `ping` and
  * `initialize` are always accepted. `initialize` answers the requested version when it is a legacy revision and
- * `2025-11-25`, the newest handshake-based one, otherwise.
+ * `2025-11-25`, the newest handshake-based one, otherwise. The handshake still decides when [notifications] flow.
  *
  * @param node the node whose capabilities become tools.
  * @param caller who is on the other end. Must be an external kind, see [serves].
@@ -97,6 +110,11 @@ private const val MAX_ECHO = 80
  * @param pageSize tools per `tools/list` page.
  * @param tools the tools to serve, one per operation without a byte stream of every capability version in its
  *   registry (by default the built-in ones). Pass the same registry to [gate] if the gate must call them.
+ * @param listChanged whether the transport delivers `notifications/tools/list_changed` to the client: it forwards
+ *   [notifications] and streams `subscriptions/listen` through [serve]. `initialize` and `server/discover` advertise
+ *   the `tools.listChanged` capability only then. A transport that answers each request and can send nothing else
+ *   (an HTTP endpoint without a stream, the adb gate) passes false, so that a client asks `tools/list` again instead
+ *   of waiting for a notification that cannot arrive.
  */
 public class McpSession(
     private val node: KoraNode,
@@ -105,6 +123,7 @@ public class McpSession(
     private val gate: JsonGate = JsonGate(node, forwardToPeers = true),
     private val pageSize: Int = DEFAULT_PAGE_SIZE,
     private val tools: McpToolSet = McpTools.builtIn,
+    private val listChanged: Boolean = true,
 ) {
     init {
         require(serves(caller.kind)) { "An MCP session acts for an external caller, not $caller" }
@@ -234,11 +253,12 @@ public class McpSession(
     /** The era of a request, validating the per-request metadata of a modern one. */
     private fun eraOf(params: JsonObject): Era {
         val meta = when (val raw = params["_meta"]) {
-            null, JsonNull -> null
+            // No per-request metadata at all: a legacy request, served with or without a handshake on this session.
+            null, JsonNull -> return Era.LEGACY
             is JsonObject -> raw
             else -> throw RpcException(INVALID_PARAMS, "_meta must be an object")
         }
-        val version = meta?.get(META_VERSION)
+        val version = meta[META_VERSION]
         if (version == null) {
             if (negotiated) return Era.LEGACY
             throw RpcException(
@@ -280,8 +300,9 @@ public class McpSession(
         put("version", serverInfo.version)
     }
 
+    /** Tools are always offered; `listChanged` only when the transport can deliver the notification. */
     private fun capabilities() = buildJsonObject {
-        putJsonObject("tools") { put("listChanged", true) }
+        putJsonObject("tools") { if (listChanged) put("listChanged", true) }
     }
 
     // ---- Lifecycle ---------------------------------------------------------------------------------------------
@@ -318,7 +339,8 @@ public class McpSession(
 
     // ---- Tools -------------------------------------------------------------------------------------------------
 
-    private fun reachableTools(): List<McpTool> = tools.all.filter { node.isAvailable(it.capability) }
+    /** A tool is listed when somebody provides its operation, even at an older minor than the tool's capability. */
+    private fun reachableTools(): List<McpTool> = tools.all.filter { node.isAvailable(it.operation) }
 
     private fun listTools(params: JsonObject, era: Era): JsonObject {
         val offset = when (val cursor = params["cursor"]) {
@@ -366,7 +388,7 @@ public class McpSession(
         val tool = tools.find(name) ?: throw RpcException(INVALID_PARAMS, "Unknown tool: ${name.take(MAX_ECHO)}")
         val argument = buildJsonObject {
             put("capability", tool.capability.id.value)
-            put("version", tool.capability.version.toString())
+            put("version", tool.operation.since.toString())
             put("operation", tool.operation.name)
             put("input", arguments)
         }
@@ -393,9 +415,14 @@ public class McpSession(
 
     // ---- Change notifications ----------------------------------------------------------------------------------
 
-    /** Emits each time the set of reachable capabilities changes, not for the state at collection time. */
+    /**
+     * Emits each time the set of reachable tools changes, not for the state at collection time. Tools of one
+     * capability whose operations exist since the same version are reachable together, so one of them is watched.
+     */
     private fun toolListChanges(): Flow<Unit> =
-        combine(tools.registry.all.map { node.availability(it) }) { available -> available.toList() }
+        combine(
+            tools.all.map { it.operation }.distinctBy { it.capabilityId to it.since }.map { node.availability(it) },
+        ) { available -> available.toList() }
             .distinctUntilChanged()
             .drop(1)
             .map { }

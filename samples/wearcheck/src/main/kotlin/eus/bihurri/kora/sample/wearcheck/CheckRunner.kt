@@ -1,6 +1,9 @@
 package eus.bihurri.kora.sample.wearcheck
 
 import eus.bihurri.kora.contract.KoraException
+import eus.bihurri.kora.contract.media.ArtworkImage
+import eus.bihurri.kora.contract.media.ArtworkRequest
+import eus.bihurri.kora.contract.media.MediaArtwork
 import eus.bihurri.kora.contract.media.MediaLibrary
 import eus.bihurri.kora.contract.media.MediaPlayback
 import eus.bihurri.kora.contract.media.PageRequest
@@ -19,9 +22,11 @@ import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeSource
 
 /**
- * Checks the relay from this device towards the other one: refresh, list playlists, subscribe, cancel.
+ * Checks the relay from this device towards the other one: refresh, list playlists, artwork (known and unknown id),
+ * subscribe, cancel.
  * Every step is reported as one greppable line: `KoraWearCheck step=<name> ok=<true|false> detail=<...>`.
  */
 class CheckRunner(
@@ -35,15 +40,21 @@ class CheckRunner(
     suspend fun run() {
         report("$TAG start")
         val peerId = refresh()
+        val volume = peerId?.let { VolumeCheckSteps(node, it, ::step).apply { cold() } }
         if (peerId == null) {
             skip("list_playlists")
+            skip("artwork")
+            skip("artwork_unknown")
             skip("subscribe")
             skip("cancel")
         } else {
             listPlaylists(peerId)
+            artwork(peerId)
+            artworkUnknown(peerId)
             val eventsAtCancel = subscribe(peerId)
             cancel(eventsAtCancel)
         }
+        if (volume == null) VolumeCheckSteps.STEPS.forEach(::skip) else volume.measure()
         report("$TAG step=summary ok=${failed == 0} passed=$passed failed=$failed")
     }
 
@@ -64,6 +75,34 @@ class CheckRunner(
         val names = page.items.map { it.name }
         true to "peer=$peerId total=${page.total} names=$names"
     }
+
+    /** Resolves the artwork of the peer's first listed playlist at [ArtworkChecks.EDGE_PX] and times the call. */
+    private suspend fun artwork(peerId: String) = step("artwork") {
+        val playlists = node.call(MediaLibrary.ListPlaylists, PageRequest(), Target.Peer(peerId))
+        val artworkId = playlists.items.firstNotNullOfOrNull { it.artworkId }
+            ?: return@step false to "peer=$peerId no artworkId in ${playlists.items.map { it.id }}"
+        val started = TimeSource.Monotonic.markNow()
+        val image = getArtwork(peerId, artworkId)
+        val (ok, detail) = ArtworkChecks.evaluate(image, ArtworkChecks.EDGE_PX, started.elapsedNow().inWholeMilliseconds)
+        ok to "peer=$peerId id=$artworkId $detail"
+    }
+
+    /** An id the peer does not know must come back as `invalid_payload`. */
+    private suspend fun artworkUnknown(peerId: String) = step("artwork_unknown") {
+        val started = TimeSource.Monotonic.markNow()
+        val result = try {
+            Result.success(getArtwork(peerId, ArtworkChecks.UNKNOWN_ID))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            Result.failure(e)
+        }
+        val (ok, detail) = ArtworkChecks.evaluateUnknown(result, started.elapsedNow().inWholeMilliseconds)
+        ok to "peer=$peerId id=${ArtworkChecks.UNKNOWN_ID} $detail"
+    }
+
+    private suspend fun getArtwork(peerId: String, artworkId: String): ArtworkImage =
+        node.call(MediaArtwork.GetArtwork, ArtworkRequest(artworkId, ArtworkChecks.EDGE_PX), Target.Peer(peerId))
 
     /** Collects for [SUBSCRIBE_WINDOW]; returns the number of events received, so [cancel] can check none follow. */
     private suspend fun subscribe(peerId: String): AtomicInteger {

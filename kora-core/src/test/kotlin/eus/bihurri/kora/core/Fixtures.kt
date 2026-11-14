@@ -3,12 +3,14 @@ package eus.bihurri.kora.core
 import eus.bihurri.kora.contract.CborCodec
 import eus.bihurri.kora.contract.CapabilityVersion
 import eus.bihurri.kora.contract.KoraCodec
+import eus.bihurri.kora.contract.KoraEvent
 import eus.bihurri.kora.contract.KoraRequest
 import eus.bihurri.kora.contract.KoraResponse
 import eus.bihurri.kora.contract.EventSpec
 import eus.bihurri.kora.contract.OperationSpec
 import eus.bihurri.kora.contract.Scope
 import eus.bihurri.kora.contract.SubscribeRequest
+import kotlinx.coroutines.flow.Flow
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertInstanceOf
 
@@ -47,6 +49,22 @@ class RecordingAudit : AuditLog {
 /** Deterministic clock: every reading advances by [step], tests can also jump with [now]. */
 class FakeClock(var now: Long = 1_000, private val step: Long = 0) : () -> Long {
     override fun invoke(): Long = now.also { now += step }
+}
+
+/** Forwards to [delegate] and keeps every envelope sent to a peer, to assert what the provider received. */
+class RecordingTransport(private val delegate: PeerTransport) : PeerTransport {
+    val calls = mutableListOf<KoraRequest>()
+    val subscriptions = mutableListOf<SubscribeRequest>()
+
+    override suspend fun call(peer: PeerInfo, request: KoraRequest): KoraResponse {
+        calls += request
+        return delegate.call(peer, request)
+    }
+
+    override fun subscribe(peer: PeerInfo, request: SubscribeRequest): Flow<KoraEvent> {
+        subscriptions += request
+        return delegate.subscribe(peer, request)
+    }
 }
 
 fun <I, O> request(

@@ -73,6 +73,49 @@ class McpHttpProtocolTest {
     }
 
     @Test
+    fun `a legacy client whose server was restarted carries on without a new handshake`() {
+        // This server never saw `initialize` from the pairing, like a new process after an auto-off: sessions live in
+        // memory only, and a legacy client does not repeat its handshake on its own.
+        val headers = mapOf("MCP-Protocol-Version" to "2025-11-25")
+
+        val list = fixture.post("""{"jsonrpc":"2.0","id":2,"method":"tools/list"}""", agent.token, headers)
+        val call = fixture.post("""{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{$listCall}}""", agent.token, headers)
+
+        assertEquals(200, list.status)
+        assertTrue(list.result["tools"]!!.jsonArray.any { it.jsonObject["name"]!!.jsonPrimitive.content == "media_library__list_playlists" })
+        assertFalse("resultType" in list.result, "a legacy answer, not a stateless-era one")
+        assertEquals(200, call.status)
+        assertFalse(call.isToolError)
+        assertEquals(2, call.result["structuredContent"]!!.jsonObject["items"]!!.jsonArray.size)
+        assertEquals(listOf(agent.caller), fixture.audit.entries.map { it.caller })
+    }
+
+    @Test
+    fun `tools listChanged is not advertised in either era, since the endpoint has no stream to notify on`() {
+        val initialize = fixture.post(legacyInitialize(), agent.token)
+        val discover = fixture.post(modernRequest("server/discover"), agent.token, modernHeaders("server/discover"))
+
+        val noNotifications = JsonObject(mapOf("tools" to JsonObject(emptyMap())))
+        assertEquals(noNotifications, initialize.result["capabilities"])
+        assertEquals(noNotifications, discover.result["capabilities"])
+    }
+
+    @Test
+    fun `a server built without a gate puts no size limit on a tool call`() {
+        // The default gate is unchanged: a host that wants limits or another timeout passes its own gate.
+        val padding = "x".repeat(300 * 1024)
+        val call = """{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"media_library__list_playlists","arguments":{"limit":2,"padding":"$padding"}}}"""
+
+        fixture.post(legacyInitialize(), agent.token)
+
+        val response = fixture.post(call, agent.token)
+
+        assertEquals(200, response.status)
+        assertFalse(response.isToolError)
+        assertEquals(2, response.result["structuredContent"]!!.jsonObject["items"]!!.jsonArray.size)
+    }
+
+    @Test
     fun `tools list and a granted tools call work in the stateless era`() {
         val list = fixture.post(modernRequest("tools/list"), agent.token, modernHeaders("tools/list"))
         val call = fixture.post(
@@ -209,7 +252,8 @@ class McpHttpProtocolTest {
     fun `evicting a session forgets the legacy handshake`() {
         val headers = mapOf("MCP-Protocol-Version" to "2025-11-25")
         fixture.post(legacyInitialize(), agent.token)
-        val list = """{"jsonrpc":"2.0","id":2,"method":"tools/list"}"""
+        // Only a request without `_meta` is served before `initialize`; this one shows whether the handshake is there.
+        val list = """{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{"_meta":{"progressToken":"p"}}}"""
         assertEquals(200, fixture.post(list, agent.token, headers).status)
         assertTrue(fixture.post(list, agent.token, headers).json().containsKey("result"))
 

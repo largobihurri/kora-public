@@ -1,5 +1,25 @@
 package eus.bihurri.kora.contract
 
+import eus.bihurri.kora.contract.ai.AiCapability
+import eus.bihurri.kora.contract.ai.AiEngine
+import eus.bihurri.kora.contract.ai.AiJob
+import eus.bihurri.kora.contract.ai.AiTask
+import eus.bihurri.kora.contract.ai.AskDocument
+import eus.bihurri.kora.contract.ai.AskRequest
+import eus.bihurri.kora.contract.ai.EngineKind
+import eus.bihurri.kora.contract.ai.EngineList
+import eus.bihurri.kora.contract.ai.FailureReason
+import eus.bihurri.kora.contract.ai.JobFailure
+import eus.bihurri.kora.contract.ai.JobIdRequest
+import eus.bihurri.kora.contract.ai.JobState
+import eus.bihurri.kora.contract.ai.MeetingSummary
+import eus.bihurri.kora.contract.ai.SummarizeMeetingRequest
+import eus.bihurri.kora.contract.ai.TextInput
+import eus.bihurri.kora.contract.ai.TranscribeRequest
+import eus.bihurri.kora.contract.ai.TranscriptInfo
+import eus.bihurri.kora.contract.ai.TranscriptPage
+import eus.bihurri.kora.contract.ai.TranscriptPassage
+import eus.bihurri.kora.contract.ai.TranscriptPassagesRequest
 import eus.bihurri.kora.contract.calendar.CalendarCapability
 import eus.bihurri.kora.contract.calendar.CalendarIdRequest
 import eus.bihurri.kora.contract.calendar.CalendarOverview
@@ -41,6 +61,7 @@ import eus.bihurri.kora.contract.media.MediaArtwork
 import eus.bihurri.kora.contract.media.MediaHistory
 import eus.bihurri.kora.contract.media.MediaLibrary
 import eus.bihurri.kora.contract.media.MediaPlayback
+import eus.bihurri.kora.contract.media.MediaVolume
 import eus.bihurri.kora.contract.media.NowPlaying
 import eus.bihurri.kora.contract.media.Page
 import eus.bihurri.kora.contract.media.PageRequest
@@ -54,7 +75,10 @@ import eus.bihurri.kora.contract.media.PlaylistTracksRequest
 import eus.bihurri.kora.contract.media.PlaysRequest
 import eus.bihurri.kora.contract.media.SearchRequest
 import eus.bihurri.kora.contract.media.SeekRequest
+import eus.bihurri.kora.contract.media.SetVolumeRequest
 import eus.bihurri.kora.contract.media.TrackSummary
+import eus.bihurri.kora.contract.media.VolumeState
+import eus.bihurri.kora.contract.media.WriteOrder
 import eus.bihurri.kora.contract.notes.CreateFolderRequest
 import eus.bihurri.kora.contract.notes.CreateNoteRequest
 import eus.bihurri.kora.contract.notes.FolderIdRequest
@@ -199,6 +223,15 @@ object WireSamples {
         input(MediaArtwork.GetArtwork, ArtworkRequest("art-1", 256))
         input(MediaArtwork.GetArtwork, ArtworkRequest("art-2"), "defaults")
         output(MediaArtwork.GetArtwork, ArtworkImage(pngSignature, ArtworkMimeType.PNG, 256, 192))
+    }
+
+    private val volume = capability(MediaVolume) {
+        input(MediaVolume.GetVolume, NoInput)
+        output(MediaVolume.GetVolume, VolumeState(7, 15))
+        input(MediaVolume.SetVolume, SetVolumeRequest(level = 9, muted = false, order = WriteOrder("watch-5f0c", 42)))
+        input(MediaVolume.SetVolume, SetVolumeRequest(level = 20), "level_only")
+        output(MediaVolume.SetVolume, VolumeState(15, 15, muted = true))
+        event(MediaVolume.VolumeChanged, VolumeState(9, 15))
     }
 
     private val fitness = capability(FitnessSession) {
@@ -733,6 +766,122 @@ object WireSamples {
         output(FilesCapability.Discard, Unit)
     }
 
+    private val queuedSummary = AiJob(
+        jobId = "job-1",
+        task = AiTask.SUMMARIZE_MEETING,
+        state = JobState.QUEUED,
+        engineId = "gemma-2b",
+        createdAtEpochMs = T0,
+        updatedAtEpochMs = T0,
+        requestKey = "meeting-7#1",
+    )
+
+    private val ai = capability(AiCapability) {
+        input(AiCapability.ListEngines, NoInput)
+        output(
+            AiCapability.ListEngines,
+            EngineList(
+                listOf(
+                    AiEngine("gemma-2b", "Gemma 2B", EngineKind.ON_DEVICE, listOf(AiTask.SUMMARIZE_MEETING, AiTask.ASK), isDefault = true),
+                    AiEngine("claude", "Claude", EngineKind.API, listOf(AiTask.SUMMARIZE_MEETING, AiTask.ASK), available = false),
+                    AiEngine("whisper-base", "Whisper base", EngineKind.ON_DEVICE, listOf(AiTask.TRANSCRIBE), isDefault = true),
+                ),
+            ),
+        )
+        output(AiCapability.ListEngines, EngineList(emptyList()), "empty")
+        input(
+            AiCapability.Transcribe,
+            TranscribeRequest("file-8", engineId = "whisper-base", language = "es-ES", fromMs = 600_000, requestKey = "meeting-7#t1"),
+        )
+        input(AiCapability.Transcribe, TranscribeRequest("file-9"), "defaults")
+        output(
+            AiCapability.Transcribe,
+            AiJob("job-3", AiTask.TRANSCRIBE, JobState.QUEUED, "whisper-base", createdAtEpochMs = T0, updatedAtEpochMs = T0, requestKey = "meeting-7#t1"),
+        )
+        input(
+            AiCapability.SummarizeMeeting,
+            SummarizeMeetingRequest(
+                transcript = TextInput(text = "Ane: we ship on Friday.\nJon: I will write the notes."),
+                engineId = "gemma-2b",
+                title = "Weekly sync",
+                startedAtEpochMs = T0,
+                durationMs = 1_800_000,
+                language = "eu",
+                requestKey = "meeting-7#1",
+            ),
+        )
+        input(AiCapability.SummarizeMeeting, SummarizeMeetingRequest(TextInput(fileId = "file-3")), "staged_default_engine")
+        output(AiCapability.SummarizeMeeting, queuedSummary)
+        input(
+            AiCapability.Ask,
+            AskRequest(
+                question = "When do we ship?",
+                documents = listOf(
+                    AskDocument(TextInput(text = "Ane: we ship on Friday."), "Weekly sync", T0),
+                    AskDocument(TextInput(fileId = "file-4")),
+                ),
+                engineId = "claude",
+                language = "es",
+                requestKey = "ask-12",
+            ),
+        )
+        input(AiCapability.Ask, AskRequest("Any risks?", listOf(AskDocument(TextInput(text = "None so far.")))), "minimal")
+        output(AiCapability.Ask, AiJob("job-2", AiTask.ASK, JobState.QUEUED, "claude", createdAtEpochMs = T0, updatedAtEpochMs = T0))
+        input(AiCapability.GetJob, JobIdRequest("job-1"))
+        output(
+            AiCapability.GetJob,
+            queuedSummary.copy(
+                state = JobState.SUCCEEDED,
+                progressPercent = 100,
+                updatedAtEpochMs = T0 + 95_000,
+                summary = MeetingSummary(
+                    overview = "The team agreed on the release date.",
+                    decisions = listOf("Ship on Friday."),
+                    actionItems = listOf("Jon writes the release notes."),
+                ),
+            ),
+        )
+        output(
+            AiCapability.GetJob,
+            AiJob("job-2", AiTask.ASK, JobState.SUCCEEDED, "claude", 100, T0, T0 + 4_000, answer = "On Friday."),
+            "answer",
+        )
+        output(
+            AiCapability.GetJob,
+            queuedSummary.copy(
+                state = JobState.FAILED,
+                updatedAtEpochMs = T0 + 2_000,
+                failure = JobFailure(FailureReason.ENGINE_UNAVAILABLE, "Model not downloaded"),
+            ),
+            "failed",
+        )
+        output(
+            AiCapability.GetJob,
+            AiJob(
+                "job-3", AiTask.TRANSCRIBE, JobState.SUCCEEDED, "whisper-base", 100, T0, T0 + 240_000,
+                transcript = TranscriptInfo(passageCount = 412, language = "es-ES"),
+            ),
+            "transcript",
+        )
+        input(AiCapability.GetTranscriptPassages, TranscriptPassagesRequest("job-3", offset = 100, limit = 2))
+        input(AiCapability.GetTranscriptPassages, TranscriptPassagesRequest("job-3"), "defaults")
+        output(
+            AiCapability.GetTranscriptPassages,
+            TranscriptPage(
+                listOf(
+                    TranscriptPassage(612_400, 615_900, "Ostiralean argitaratuko dugu."),
+                    TranscriptPassage(616_000, 619_250, "Yo escribo las notas."),
+                ),
+                total = 412,
+                offset = 100,
+            ),
+        )
+        output(AiCapability.GetTranscriptPassages, TranscriptPage(emptyList(), total = 0, offset = 0), "empty")
+        input(AiCapability.CancelJob, JobIdRequest("job-1"))
+        output(AiCapability.CancelJob, queuedSummary.copy(state = JobState.CANCELLED, updatedAtEpochMs = T0 + 1_000))
+        event(AiCapability.JobChanged, queuedSummary.copy(state = JobState.RUNNING, progressPercent = 40, updatedAtEpochMs = T0 + 30_000))
+    }
+
     private fun <T> envelopeCase(name: String, serializer: KSerializer<T>, value: T) =
         FixtureCase(ENVELOPE_GROUP, ENVELOPE_VERSION, name, serializer, value)
 
@@ -777,7 +926,7 @@ object WireSamples {
 
     /** All samples of the current code. */
     val cases: List<FixtureCase<*>> = library + playback + history + artwork + fitness + location +
-        reminders + calendar + notes + reminderAttachments + noteAttachments + files + envelope
+        reminders + calendar + notes + reminderAttachments + noteAttachments + files + volume + ai + envelope
 
     /** Operation inputs, outputs and events of a built-in capability that a sample must cover. */
     fun requiredNames(capability: Capability): Set<String> =

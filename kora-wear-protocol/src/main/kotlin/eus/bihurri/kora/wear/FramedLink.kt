@@ -21,14 +21,22 @@ public sealed interface LinkEvent {
     /** The counterpart is reachable again after a [Lost]; it may have restarted, so ask it again what you need. */
     public data object Reconnected : LinkEvent
 
-    /** The counterpart app restarted (its [Frame.epoch] changed): whatever it held for us, such as subscriptions, is gone. */
+    /**
+     * The counterpart app restarted (its [Frame.epoch] changed): whatever the previous process held for us, such as
+     * subscriptions and unanswered requests, is gone.
+     *
+     * It is emitted just before the [Received] of the frame that revealed it. That frame already comes from the new
+     * process, so what it answers was not lost with the old one: a collector that fails its in-flight work on a
+     * restart should wait for that [Received] and spare what it answers.
+     */
     public data object CounterpartRestarted : LinkEvent
 }
 
 /**
  * A [WireLink] speaking [Frame]s: encodes what is sent, decodes and validates what arrives, and turns the link's
  * reachability and the counterpart's [Frame.epoch] into [LinkEvent]s. Directory, transport and server of one link
- * share a single instance, so every frame is decoded once.
+ * share a single instance, so every frame is decoded once. A frame with a new epoch is delivered as
+ * [LinkEvent.CounterpartRestarted] followed by its own [LinkEvent.Received].
  *
  * Collectors of [events] must be registered **before** [start]: frames arriving without a collector are dropped.
  * [WearRelay] takes care of the order.

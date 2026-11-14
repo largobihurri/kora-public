@@ -1,5 +1,6 @@
 package eus.bihurri.kora.contract
 
+import eus.bihurri.kora.contract.ai.AiCapability
 import eus.bihurri.kora.contract.calendar.CalendarCapability
 import eus.bihurri.kora.contract.files.FilesCapability
 import eus.bihurri.kora.contract.fitness.FitnessSession
@@ -8,6 +9,7 @@ import eus.bihurri.kora.contract.media.MediaArtwork
 import eus.bihurri.kora.contract.media.MediaHistory
 import eus.bihurri.kora.contract.media.MediaLibrary
 import eus.bihurri.kora.contract.media.MediaPlayback
+import eus.bihurri.kora.contract.media.MediaVolume
 import eus.bihurri.kora.contract.notes.NoteAttachments
 import eus.bihurri.kora.contract.notes.NotesCapability
 import eus.bihurri.kora.contract.reminders.ReminderAttachments
@@ -70,7 +72,7 @@ public object Capabilities {
         listOf(
             MediaLibrary, MediaPlayback, MediaHistory, MediaArtwork, FitnessSession, LocationCapability,
             RemindersCapability, CalendarCapability, NotesCapability,
-            ReminderAttachments, NoteAttachments, FilesCapability,
+            ReminderAttachments, NoteAttachments, FilesCapability, MediaVolume, AiCapability,
         ),
     )
 

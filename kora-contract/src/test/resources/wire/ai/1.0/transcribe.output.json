@@ -1,0 +1,1 @@
+{"jobId":"job-3","task":"transcribe","state":"queued","engineId":"whisper-base","progressPercent":null,"createdAtEpochMs":1700000000000,"updatedAtEpochMs":1700000000000,"requestKey":"meeting-7#t1","transcript":null,"summary":null,"answer":null,"failure":null}

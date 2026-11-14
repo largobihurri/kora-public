@@ -3,8 +3,8 @@
 For the session that writes the provider module in the app that provides these capabilities (Oharrak). Written
 2026-11-10 after the second round of remarks, and brought up to date on 2026-11-12 after your review of the contract.
 The contract is `docs/organizer-vocabulary.md` (sections 4 to 9 are the payloads; section 13 has the three rounds).
-**Nothing is published yet**: the six capabilities and the stream transport are implemented on the branch (see the
-last section and `odd/tasks/kora-organizer.md`). Proposed release: Kora `1.3.0`, every capability `1.0`.
+**Published in Kora `1.3.0`** (tag `v1.3.0`), every capability `1.0`: the six capabilities and the stream transport
+(see the last section and `odd/tasks/kora-organizer.md`).
 
 ## Third round: what changed after your review (2026-11-12)
 
@@ -207,13 +207,14 @@ access missing. `payload_too_large`: a file over your limit.
   former `7174b48`) and `768ecb9`, and changed by your review in the third round: `./gradlew build` passes. Kotlin
   objects: `RemindersCapability`, `CalendarCapability`, `NotesCapability`, `ReminderAttachments`, `NoteAttachments`,
   in packages `eus.bihurri.kora.contract.reminders`, `.calendar`, `.notes`; the shared attachment types and
-  `FileHandle` are in `.files`. Unpublished: do not depend on it yet.
+  `FileHandle` are in `.files`. Published in `1.3.0`.
 - The stream transport and `files@1.0` are implemented on the branch: the core stream API (`ByteStream`,
   `callSending`, `callReceiving`, `onUpload`, `onDownload`) in `8ff98da` and `797558f`; `FilesCapability`, with the
   stream operations left out of MCP, in `2c40007`; the Binder methods and protocol version 2 in `02e719b`, reviewed
-  and approved. Still unpublished. Pending on a device: that a descriptor passed over Binder is readable by the other
-  app, that closing a descriptor unblocks a read or write blocked on it, and what a pipe does when either process
-  dies.
+  and approved. Published in `1.3.0`, and checked on the emulator (API 36) with `samples/stream-checks.sh`: a file goes from one app to the other and
+  back byte for byte, a read or a write blocked on a pipe ends when the descriptor is closed (by the idle timeout or
+  by another thread), and a stream fails at once, rather than hanging, when the provider or the caller is killed
+  half way through. The first upload and download between Oharrak and KOKO on a phone confirms it on hardware.
 - Corrections to this file from the implementation: the repetition is eight fields (`repeatOrdinal` and
   `repeatDayKind` are two; nine with `repeatFromCompletion` since the third round); `get_note.maxChars` is 500 to 20 000; the contract cannot tell that Markdown has
   nothing written, so your provider rejects it; an enum constant your build does not know (a newer caller's, or a

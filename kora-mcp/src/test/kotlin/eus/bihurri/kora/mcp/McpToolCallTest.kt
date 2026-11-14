@@ -155,10 +155,20 @@ class McpToolCallTest {
             "media_playback__get_state" to "{}",
             "media_history__list_plays" to """{"fromEpochMs":0,"toEpochMs":10000,"page":{"limit":5}}""",
             "media_artwork__get_artwork" to """{"artworkId":"art-0","maxEdgePx":64}""",
+            "media_volume__get_volume" to "{}",
+            "media_volume__set_volume" to """{"level":20,"muted":true,"order":{"writer":"agent-1","sequence":1}}""",
             "fitness_session__get_active_session" to "{}",
             "location__get_last_fix" to "{}",
             "location__configure_stream" to """{"desiredIntervalMs":1000,"maxLatencyMs":3000}""",
             "files__discard" to """{"fileId":"file-1"}""",
+            "ai__list_engines" to "{}",
+            "ai__transcribe" to """{"audioFileId":"file-8","language":"es-ES","fromMs":0,"requestKey":"m-1#t1"}""",
+            "ai__get_transcript_passages" to """{"jobId":"job-1","offset":0,"limit":10}""",
+            "ai__summarize_meeting" to
+                """{"transcript":{"text":"Ane: we ship on Friday."},"durationMs":60000,"language":"eu","requestKey":"m-1#1"}""",
+            "ai__ask" to """{"question":"When do we ship?","documents":[{"text":{"text":"Ane: we ship on Friday."},"title":"Sync"}]}""",
+            "ai__get_job" to """{"jobId":"job-1"}""",
+            "ai__cancel_job" to """{"jobId":"job-1"}""",
         ) + organizerArguments
         assertEquals(McpTools.all.map { it.name }.toSet(), arguments.keys)
 
@@ -415,6 +425,34 @@ class McpToolCallTest {
 
         assertTrue(answer.isError())
         assertEquals("internal: Internal error", answer.text())
+    }
+
+    @Test
+    fun `a legacy request without _meta is served without a handshake, exactly as after one`() = runTest {
+        access.grants[AGENT] = setOf(MediaLibrary.ReadScope)
+        val handshaken = McpSession(node, AGENT, SERVER_INFO).apply {
+            handle(rpc("initialize", parse("""{"protocolVersion":"2025-11-25"}""")))
+            handle(rpc("notifications/initialized", id = null))
+        }
+        val list = rpc("tools/list")
+        val call = rpc("tools/call", parse("""{"name":"media_library__list_playlists","arguments":{"limit":2}}"""))
+
+        // `session` never saw `initialize`: a legacy client whose server process was restarted since the handshake.
+        val listed = session.handle(list)
+        val called = session.handle(call)
+
+        assertEquals(handshaken.handle(list), listed)
+        assertEquals(handshaken.handle(call), called)
+        assertEquals(
+            McpTools.all.map { it.name }.take(McpSession.DEFAULT_PAGE_SIZE), // the first page of the catalogue
+            parse(listed).resultObject["tools"]!!.jsonArray.map { it.jsonObject["name"]!!.jsonPrimitive.content },
+        )
+        assertFalse(parse(called).isError())
+        assertEquals(2, parse(called).resultObject["structuredContent"]!!.jsonObject["items"]!!.jsonArray.size)
+        // Served, policed and audited as the session's caller both times: identity never came from the handshake.
+        assertEquals(listOf("list_playlists", "list_playlists"), calls)
+        assertEquals(listOf(AGENT, AGENT), audit.entries.map { it.caller })
+        assertEquals(listOf(AuditOutcome.Ok, AuditOutcome.Ok), audit.entries.map { it.outcome })
     }
 
     @Test

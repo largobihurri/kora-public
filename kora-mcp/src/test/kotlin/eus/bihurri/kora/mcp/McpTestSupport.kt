@@ -1,6 +1,17 @@
 package eus.bihurri.kora.mcp
 
 import eus.bihurri.kora.contract.Scope
+import eus.bihurri.kora.contract.ai.AiCapability
+import eus.bihurri.kora.contract.ai.AiEngine
+import eus.bihurri.kora.contract.ai.AiJob
+import eus.bihurri.kora.contract.ai.AiTask
+import eus.bihurri.kora.contract.ai.EngineKind
+import eus.bihurri.kora.contract.ai.EngineList
+import eus.bihurri.kora.contract.ai.JobState
+import eus.bihurri.kora.contract.ai.MeetingSummary
+import eus.bihurri.kora.contract.ai.TranscriptInfo
+import eus.bihurri.kora.contract.ai.TranscriptPage
+import eus.bihurri.kora.contract.ai.TranscriptPassage
 import eus.bihurri.kora.contract.files.FileHandle
 import eus.bihurri.kora.contract.files.FilesCapability
 import eus.bihurri.kora.contract.fitness.ActiveSession
@@ -15,12 +26,14 @@ import eus.bihurri.kora.contract.media.MediaArtwork
 import eus.bihurri.kora.contract.media.MediaHistory
 import eus.bihurri.kora.contract.media.MediaLibrary
 import eus.bihurri.kora.contract.media.MediaPlayback
+import eus.bihurri.kora.contract.media.MediaVolume
 import eus.bihurri.kora.contract.media.Page
 import eus.bihurri.kora.contract.media.PlayRecord
 import eus.bihurri.kora.contract.media.PlaybackState
 import eus.bihurri.kora.contract.media.PlaybackStatus
 import eus.bihurri.kora.contract.media.PlaylistSummary
 import eus.bihurri.kora.contract.media.TrackSummary
+import eus.bihurri.kora.contract.media.VolumeState
 import eus.bihurri.kora.core.AuditEntry
 import eus.bihurri.kora.core.AuditLog
 import eus.bihurri.kora.core.ByteStream
@@ -100,6 +113,54 @@ fun KoraNode.provideEverything(onCall: (String) -> Unit = {}) {
         on(MediaArtwork.GetArtwork) {
             onCall("get_artwork")
             artworkImage
+        }
+    }
+    provideStubbed(MediaVolume) {
+        // Keeps its state so an omitted mute stays as it was; it ignores the write order.
+        var volume = VolumeState(5, 15)
+        on(MediaVolume.GetVolume) { volume }
+        on(MediaVolume.SetVolume) { request ->
+            onCall("set_volume")
+            VolumeState(request.level.coerceAtMost(15), 15, request.muted ?: volume.muted).also { volume = it }
+        }
+    }
+    provideStubbed(AiCapability) {
+        // Every job finishes at once: a transcription with two passages, a summary job with a summary, a question with
+        // an answer.
+        val jobs = mutableMapOf<String, AiJob>()
+        fun start(task: AiTask, engineId: String?, requestKey: String?): AiJob {
+            val id = "job-${jobs.size + 1}"
+            val done = AiJob(id, task, JobState.SUCCEEDED, engineId ?: "gemma-2b", 100, 1, 2, requestKey)
+            jobs[id] = when (task) {
+                AiTask.TRANSCRIBE -> done.copy(transcript = TranscriptInfo(2, "es-ES"))
+                AiTask.SUMMARIZE_MEETING -> done.copy(summary = MeetingSummary("Overview", listOf("Ship"), listOf("Write notes")))
+                else -> done.copy(answer = "On Friday.")
+            }
+            return AiJob(id, task, JobState.QUEUED, engineId ?: "gemma-2b", createdAtEpochMs = 1, updatedAtEpochMs = 1, requestKey = requestKey)
+        }
+        on(AiCapability.ListEngines) {
+            EngineList(listOf(AiEngine("gemma-2b", "Gemma 2B", EngineKind.ON_DEVICE, listOf(AiTask.SUMMARIZE_MEETING, AiTask.ASK), isDefault = true)))
+        }
+        on(AiCapability.Transcribe) { request ->
+            onCall("transcribe")
+            start(AiTask.TRANSCRIBE, request.engineId, request.requestKey)
+        }
+        on(AiCapability.GetTranscriptPassages) { request ->
+            val passages = listOf(TranscriptPassage(0, 1_500, "Kaixo."), TranscriptPassage(1_500, 4_000, "Empezamos."))
+            TranscriptPage(passages.drop(request.offset).take(request.limit), passages.size, request.offset)
+        }
+        on(AiCapability.SummarizeMeeting) { request ->
+            onCall("summarize_meeting")
+            start(AiTask.SUMMARIZE_MEETING, request.engineId, request.requestKey)
+        }
+        on(AiCapability.Ask) { request ->
+            onCall("ask")
+            start(AiTask.ASK, request.engineId, request.requestKey)
+        }
+        on(AiCapability.GetJob) { request -> jobs[request.jobId] ?: jobs.values.first() }
+        on(AiCapability.CancelJob) { request ->
+            onCall("cancel_job")
+            jobs[request.jobId] ?: jobs.values.first()
         }
     }
     provideStubbed(FitnessSession) { on(FitnessSession.GetActiveSession) { activeSession } }

@@ -21,6 +21,8 @@ import java.net.ServerSocket
 import java.net.URL
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 fun address(text: String): InetAddress = InetAddress.getByName(text)
 
@@ -90,24 +92,42 @@ class TestAccess : ExternalAccess {
 
 val playlists = List(3) { PlaylistSummary("pl-$it", "Playlist $it", it + 1) }
 
-fun testNode(access: ExternalAccess = TestAccess()): KoraNode =
-    KoraNode(nodeId = "kardio", policy = DefaultCallerPolicy(access)).apply {
+/**
+ * The node an app would hand in. [listPlaylists] is what `list_playlists` reads, so a test can make the tool slow or
+ * its answer large.
+ */
+fun testNode(
+    access: ExternalAccess = TestAccess(),
+    callTimeout: Duration = 5.seconds,
+    listPlaylists: suspend () -> List<PlaylistSummary> = { playlists },
+): KoraNode =
+    KoraNode(nodeId = "kardio", policy = DefaultCallerPolicy(access), callTimeout = callTimeout).apply {
         provideStubbed(MediaLibrary) {
-            on(MediaLibrary.ListPlaylists) { page -> Page(playlists.drop(page.offset).take(page.limit), playlists.size, page.offset) }
+            on(MediaLibrary.ListPlaylists) { page ->
+                val all = listPlaylists()
+                Page(all.drop(page.offset).take(page.limit), all.size, page.offset)
+            }
         }
     }
 
 class HttpAnswer(val status: Int, val body: String)
 
 /** One POST to the MCP endpoint over a fresh connection; a refused request is an answer, not an exception. */
-fun post(host: String, port: Int, body: String, token: String?, headers: Map<String, String> = emptyMap()): HttpAnswer {
+fun post(
+    host: String,
+    port: Int,
+    body: String,
+    token: String?,
+    headers: Map<String, String> = emptyMap(),
+    readTimeoutMs: Int = 5_000,
+): HttpAnswer {
     val url = if (':' in host) "http://[$host]:$port/mcp" else "http://$host:$port/mcp"
     val connection = URL(url).openConnection() as HttpURLConnection
     try {
         connection.requestMethod = "POST"
         connection.doOutput = true
         connection.connectTimeout = 2_000
-        connection.readTimeout = 5_000
+        connection.readTimeout = readTimeoutMs
         connection.setRequestProperty("Content-Type", "application/json")
         connection.setRequestProperty("Accept", "application/json")
         token?.let { connection.setRequestProperty("Authorization", "Bearer $it") }

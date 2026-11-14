@@ -30,7 +30,8 @@ const val TAG = "KoraWearCheck"
 
 /**
  * The same app runs on the phone and on the watch. Each side provides stub media data that names its role, so the
- * check can tell whose answer it got, and each side serves the other through [KoraWear].
+ * check can tell whose answer it got, with generated cover art ([WearArtwork]), and each side serves the other through
+ * [KoraWear].
  */
 class WearCheckApp : Application() {
     lateinit var wear: KoraWear
@@ -65,8 +66,8 @@ class WearCheckApp : Application() {
 
     private fun KoraNode.provideStubs() {
         val playlists = listOf(
-            PlaylistSummary(id = "$role-1", name = "$role-1", trackCount = 2),
-            PlaylistSummary(id = "$role-2", name = "$role-2", trackCount = 1),
+            PlaylistSummary(id = "$role-1", name = "$role-1", trackCount = 2, artworkId = WearArtwork.playlistArtworkId("$role-1")),
+            PlaylistSummary(id = "$role-2", name = "$role-2", trackCount = 1, artworkId = WearArtwork.playlistArtworkId("$role-2")),
         )
         val tracks = mapOf(
             "$role-1" to listOf(track(1), track(2)),
@@ -82,6 +83,9 @@ class WearCheckApp : Application() {
                 paged(catalog.filter { it.title.contains(request.query.trim(), ignoreCase = true) }, request.page)
             }
         }
+
+        // Both sides serve artwork, so the check passes in either direction (the watch -> phone one is the interesting one).
+        provideWearArtwork(WearArtwork(role, playlists.map { it.id }.toSet()), ArtworkRenderer::renderPng)
 
         provide(MediaPlayback) {
             on(MediaPlayback.Play) { state.update { it.copy(status = PlaybackStatus.PLAYING) } }
@@ -115,13 +119,22 @@ class WearCheckApp : Application() {
                 }.onCompletion { Log.i(TAG, "$TAG served=NowPlayingChanged state=ended caller=$caller") }
             }
         }
+
+        // Both sides serve volume too (VolumeCheckSteps); the watch -> phone direction is the one Kardio uses.
+        provideWearVolume()
     }
 
     private fun <T> paged(all: List<T>, page: PageRequest): Page<T> =
         Page(all.drop(page.offset).take(page.limit), total = all.size, offset = page.offset)
 
     /** Track `n` as it would be played on this device; for events, `n` counts up from 1 per subscription. */
-    private fun track(n: Int) = TrackSummary(id = "$role-t$n", title = "$role track $n", artist = role, durationMs = 180_000)
+    private fun track(n: Int) = TrackSummary(
+        id = "$role-t$n",
+        title = "$role track $n",
+        artist = role,
+        durationMs = 180_000,
+        artworkId = WearArtwork.trackArtworkId(role, n),
+    )
 
     private companion object {
         val CALL_TIMEOUT = 20.seconds

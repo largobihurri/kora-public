@@ -836,7 +836,8 @@ The rest of the review needs no contract change, or is missing functionality tha
    in the contract; the stream API and `StreamingPeerTransport` in `kora-core`, tested with the in-memory
    transport; the two Binder methods, protocol version 2 and the minimum-version check in `kora-android`, tested on
    the JVM with fakes; stream operations left out of the MCP tools. It gets an independent verification, and its
-   on-device check is listed as pending until a device or emulator is available.
+   on-device check is listed as pending until a device or emulator is available (done on the emulator after the
+   1.3.0 release: `samples/stream-checks.sh`).
 2. Contract: packages `reminders`, `calendar`, `notes`, `files` in `kora-contract`; the six capabilities in
    `Capabilities.registry`; request validation with tests.
 3. Samples in `WireSamples` for every input, output and event; fixtures recorded with

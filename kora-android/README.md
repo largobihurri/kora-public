@@ -159,8 +159,10 @@ hand. `arg` is one JSON-RPC message; the answer is the JSON-RPC response in `jso
 
 - **Session per caller.** The runtime keeps one `McpSession` per identified caller, so `initialize` and later requests
   may arrive in separate `content call`s. adb is always `shell`, so grants are the ones given to `shell`, and all adb
-  clients of the app share that session (one MCP client per app). An app process restart loses it: a handshake-era
-  client must `initialize` again (the bridge does it). Tools of peer capabilities are served too, authorized by this app.
+  clients of the app share that session (one MCP client per app). An app process restart loses it, which a client
+  does not notice: a request without `_meta` (a handshake-era client) is served with or without a prior `initialize`.
+  Nothing server-initiated crosses the gate, so `tools.listChanged` is not advertised. Tools of peer capabilities are
+  served too, authorized by this app.
 - **Callers.** Any external kind is served (`SHELL`, `EXTERNAL_APP`); the identity comes from the uid, never from the
   payload. `SELF` and `PEER` are refused with `error_code=unauthorized`: they hold every scope and have the typed API.
 - **Encoding.** The remote shell re-parses the command, so an `arg` that starts with `b64:` is the message in UTF-8,
@@ -217,4 +219,7 @@ adb shell content call --uri content://eus.bihurri.kora.sample.provider.kora --m
   the handler runs under `runBlocking`, bounded by the call timeout. The service stays asynchronous (callbacks) because it
   also carries long-lived subscriptions for many concurrent callers.
 
-Samples: `samples/provider` and `samples/consumer` (same debug key; filter logcat by `KoraSample`).
+Samples: `samples/provider` and `samples/consumer` (same debug key; filter logcat by `KoraSample`). The provider also
+offers `files@1.0`, and `samples/stream-checks.sh <serial>` runs the on-device checks of the Binder streams between
+the two (round trip, stalls on both sides, a close from another thread, either process killed mid-stream). It
+force-stops apps and clears logcat: use an emulator or a test phone, never a personal one.

@@ -52,7 +52,9 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(16), dp(16), dp(16))
         }
-        column.addView(text("Kora sample provider\nnode: ${KoraAndroid.node.nodeId}\nProvides media.library and media.playback."))
+        column.addView(text("Kora sample provider\nnode: ${KoraAndroid.node.nodeId}\nProvides media.library, media.artwork and media.playback."))
+        column.addView(heading("adb shell"))
+        column.addView(buildShellArtworkSwitch())
         column.addView(heading("Agent access"))
         column.addView(buildSwitch())
         statusView = text("Off")
@@ -92,6 +94,15 @@ class MainActivity : Activity() {
         // The token is shown once and is not kept: leaving the screen forgets it.
         hideToken()
         super.onStop()
+    }
+
+    // --- the adb shell's artwork grant ------------------------------------------------------------------------
+
+    /** Off: `kora-bridge` -> `get_artwork` answers `unauthorized` while the library tools still answer (README). */
+    private fun buildShellArtworkSwitch() = Switch(this).apply {
+        text = "Grant artwork to adb shell (media.artwork.read)"
+        isChecked = ShellArtworkGrant.isGranted()
+        setOnClickListener { ShellArtworkGrant.set(this@MainActivity, isChecked) }
     }
 
     // --- the switch --------------------------------------------------------------------------------------------

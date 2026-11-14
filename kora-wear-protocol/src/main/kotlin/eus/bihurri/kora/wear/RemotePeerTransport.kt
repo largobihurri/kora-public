@@ -33,11 +33,14 @@ import kotlin.time.Duration.Companion.seconds
  * removed before the request crosses, because the other device knows the peer by its plain id.
  *
  * - A call is one frame out and one frame back; it fails with `timeout` after [callTimeout], and with
- *   `provider_unavailable` when the link cannot send or is lost while waiting. Cancelling the caller drops a late
- *   answer; the other device is not told (calls have no cancel frame).
+ *   `provider_unavailable` when the link cannot send, is lost while waiting, or the counterpart app restarted.
+ *   Cancelling the caller drops a late answer; the other device is not told (calls have no cancel frame).
  * - A subscription is one frame out, then one frame per event. Cancelling the collector sends a `cancel` frame
  *   (best effort). A link loss, or a restart of the counterpart app, ends every stream with `provider_unavailable`.
  *   There is no keep-alive, so a counterpart that dies silently cannot be noticed until its next frame.
+ * - A restart is noticed on the first frame of the new process. When that frame is the answer to a call, the call
+ *   completes with it: the new process executed it (typically the call itself cold-started the app). Every other
+ *   call in flight and every stream fails, because nothing tells whether the new process knows them.
  *
  * Failures reach the node as [KoraException], like with the Binder transport.
  *
@@ -70,11 +73,20 @@ public class RemotePeerTransport(
     init {
         require(callTimeout.isPositive()) { "callTimeout must be positive: $callTimeout" }
         scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            var restarted = false
             link.events.collect { event ->
                 when (event) {
-                    is LinkEvent.Received -> receive(event.body)
+                    is LinkEvent.Received -> {
+                        if (restarted) {
+                            restarted = false
+                            // This frame comes from the new process: the call it answers was not lost with the old one.
+                            val answered = (event.body as? FrameBody.CallResult)?.response?.id
+                            failEverything("The counterpart app restarted", answered)
+                        }
+                        receive(event.body)
+                    }
                     LinkEvent.Lost -> failEverything("The counterpart device is no longer reachable")
-                    LinkEvent.CounterpartRestarted -> failEverything("The counterpart app restarted")
+                    LinkEvent.CounterpartRestarted -> restarted = true // handled with the frame that revealed it, which follows
                     LinkEvent.Reconnected -> Unit
                 }
             }
@@ -172,9 +184,10 @@ public class RemotePeerTransport(
         }
     }
 
-    private fun failEverything(message: String) {
+    /** Fails every call in flight, except the one with request id [answered], and every stream. */
+    private fun failEverything(message: String, answered: String? = null) {
         for ((id, answer) in pending) {
-            if (pending.remove(id, answer)) answer.completeExceptionally(unavailable(message))
+            if (id != answered && pending.remove(id, answer)) answer.completeExceptionally(unavailable(message))
         }
         for ((id, sink) in streams) {
             if (streams.remove(id, sink)) sink.onLost(message)

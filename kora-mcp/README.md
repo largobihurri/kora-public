@@ -24,8 +24,10 @@ their values without `unknown` in an `inputSchema` (a caller never sends it) and
 `maximum` (e.g. `maxEdgePx` of `media_artwork__get_artwork`: 16..1024). Results always carry defaults, so every property of an
 `outputSchema` is required. `structuredContent` is always an object; a result that is `null`, a primitive or a list
 is wrapped as `{"result": ...}`. `tools/list` paginates with opaque cursors; a peer joining or leaving emits
-`notifications/tools/list_changed`. Because `KoraNode.provide` requires a handler for every operation of the capability
-(a capability is atomic), every advertised tool is backed by a handler: none answers `unknown_operation`.
+`notifications/tools/list_changed`, and the `tools.listChanged` capability is advertised only by a session whose
+transport can deliver it (`listChanged`, see below). Because `KoraNode.provide` requires a handler for every
+operation of the capability (a capability is atomic), every advertised tool is backed by a handler: none answers
+`unknown_operation`.
 
 Every listed tool carries the standard MCP tool `annotations` `readOnlyHint` and `destructiveHint` (defined since
 revision `2025-03-26`), taken from the operation's effect (`OperationSpec.effect`):
@@ -47,7 +49,15 @@ val session = McpSession(node, Caller(CallerKind.REMOTE_AGENT, pairingId), McpSe
 // per incoming line / HTTP body:
 session.handle(message)?.let(::write)          // or session.serve(message) to stream subscriptions/listen
 // legacy clients: forward session.notifications to the client for the life of the connection
+// a transport that cannot send anything of its own (HTTP without a stream, the adb gate): listChanged = false
 ```
+A request without `_meta` is a legacy request and is served whether or not `initialize` ran on the session, with the
+answer it gets after a handshake: sessions live in memory, a legacy client does not repeat its handshake on its own,
+and the caller comes from the transport on every request, so a restarted server process costs the client nothing.
+A request whose `_meta` carries the protocol version is stateless-era; one whose `_meta` lacks it is legacy after
+`initialize` and `-32602` before. `listChanged` (default true) says whether the transport delivers
+`notifications/tools/list_changed`; only then do `initialize` and `server/discover` advertise `tools.listChanged`.
+
 `tools/call` runs through `JsonGate` (`forwardToPeers = true`), so lookup, version check, policy and audit are the
 node's. Failures of the tool are results with `isError: true` (`unauthorized: Scope '...' is not granted`); protocol
 failures are JSON-RPC errors (`-32700`, `-32600`, `-32601`, `-32602`, `-32603`, `-32022`).

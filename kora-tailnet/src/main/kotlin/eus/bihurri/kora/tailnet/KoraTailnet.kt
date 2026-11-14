@@ -7,6 +7,7 @@ import android.os.SystemClock
 import android.util.Log
 import eus.bihurri.kora.core.Caller
 import eus.bihurri.kora.core.CallerKind
+import eus.bihurri.kora.core.JsonGate
 import eus.bihurri.kora.core.KoraNode
 import eus.bihurri.kora.mcp.McpServerInfo
 import eus.bihurri.kora.mcp.http.DeniedAttempt
@@ -70,6 +71,13 @@ public object KoraTailnet {
     private const val PAIRINGS_FILE = "kora-tailnet-pairings.json"
     private const val MAX_NAME_CHARS = 80
 
+    /**
+     * Largest tool argument and tool answer (UTF-8 bytes of their JSON) served over the tailnet: 256 KiB, the limit of
+     * the adb MCP gate of `kora-android` (`PayloadLimits.MAX_ENVELOPE_BYTES`), so a tool behaves the same on both
+     * surfaces. This module does not depend on that one, hence the copy; keep the two equal.
+     */
+    private const val MAX_TOOL_PAYLOAD_BYTES = 256 * 1024
+
     @Volatile
     private var runtime: TailnetRuntime? = null
 
@@ -77,6 +85,12 @@ public object KoraTailnet {
      * Prepares the listener; call once from `Application.onCreate`, after the node is installed. Nothing listens until
      * [start]. [node] is the node to serve (usually the one `KoraAndroid.install` returned); its caller policy is the
      * only authority over what a paired agent may do.
+     *
+     * Tools are called with the settings of the adb MCP gate, taken from [node] so the app does not repeat them: a
+     * tool that has not answered within [KoraNode.callTimeout] is a `timeout` tool error, and a tool argument or
+     * answer above 256 KiB is a `payload_too_large` one. The HTTP request as a whole keeps the limits of
+     * [McpHttpConfig] (30 s for the answer, 1 MiB for the body), so a longer `callTimeout` is cut short at 30 s with
+     * a `504`.
      *
      * @throws IllegalStateException when called twice.
      */
@@ -126,10 +140,20 @@ public object KoraTailnet {
                     log = { Log.i(TAG, it) },
                 ),
                 listener = listener,
+                gate = toolGate(node),
             )
         }
         install(TailnetRuntime(serviceContext, config, store, controller, scope))
     }
+
+    /** How tools are called over the tailnet: as through the adb MCP gate, with the call timeout of [node]. */
+    private fun toolGate(node: KoraNode) = JsonGate(
+        node,
+        timeout = node.callTimeout,
+        maxRequestBytes = MAX_TOOL_PAYLOAD_BYTES,
+        maxResponseBytes = MAX_TOOL_PAYLOAD_BYTES,
+        forwardToPeers = true,
+    )
 
     internal fun install(runtime: TailnetRuntime) = synchronized(this) {
         check(this.runtime == null) { "KoraTailnet is already installed" }

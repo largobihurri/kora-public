@@ -15,6 +15,7 @@ import eus.bihurri.kora.contract.KoraRequest
 import eus.bihurri.kora.contract.KoraResponse
 import eus.bihurri.kora.contract.ErrorCode
 import eus.bihurri.kora.contract.EventSpec
+import eus.bihurri.kora.contract.MemberSpec
 import eus.bihurri.kora.contract.NodeDescriptor
 import eus.bihurri.kora.contract.OperationSpec
 import eus.bihurri.kora.contract.Scope
@@ -30,12 +31,14 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -61,7 +64,10 @@ import kotlin.time.Duration.Companion.seconds
  * @param peerDirectory which peers exist and what they provide.
  * @param transport how to reach them.
  * @param clock milliseconds source for audit timestamps and durations; inject a fake in tests.
- * @param callTimeout limit for one outbound [call], local or remote. Stream calls are not bound by it.
+ * @param callTimeout limit for one outbound [call], local or remote, and for one call that [dispatch] forwards to a
+ *   peer. Stream calls ([callSending], [callReceiving]) are not bound by it. Readable, so that a surface serving this
+ *   node to external callers (a gate, an MCP endpoint) can give their calls the limit the app chose instead of asking
+ *   the app for it again.
  * @param onInternalError notified with the original exception whenever a failure is reported to the caller
  *   as `internal`; the caller never sees its message or stack trace.
  */
@@ -74,7 +80,7 @@ public class KoraNode(
     private val peerDirectory: PeerDirectory = PeerDirectory.None,
     private val transport: PeerTransport = PeerTransport.None,
     private val clock: () -> Long = System::currentTimeMillis,
-    private val callTimeout: Duration = 5.seconds,
+    public val callTimeout: Duration = 5.seconds,
     private val onInternalError: (Throwable) -> Unit = {},
     private val registry: CapabilityRegistry = Capabilities.registry,
 ) {
@@ -133,8 +139,10 @@ public class KoraNode(
     /**
      * Serves one request from [caller]. Never throws for a failed request: every failure is a
      * [KoraResponse.Failure] carrying `unknown_capability`, `incompatible_version`, `unknown_operation`,
-     * `unauthorized`, `invalid_payload`, a `KoraException` thrown by the handler as is, or `internal` for anything
-     * else (without exception details). Cancellation of the calling coroutine propagates and is not audited.
+     * `unauthorized`, `invalid_payload`, a `KoraException` thrown by the handler as is, `timeout` when a timeout of
+     * the handler's own expires (a `withTimeout` inside it), or `internal` for anything else (without exception
+     * details). Cancellation of the calling coroutine propagates and is not audited; that includes a timeout of a
+     * scope around this call, which is not the handler's.
      *
      * The request carries no byte stream, so an operation that needs one ([handleSending], [handleReceiving]) is
      * `provider_unavailable`, decided after the policy: a refused caller still gets `unauthorized`, and every
@@ -222,8 +230,13 @@ public class KoraNode(
      * policy here is the only check the external caller meets. Only operations of the built-in capabilities can be
      * forwarded this way, because their scope is known from the contract; any other operation is
      * `unknown_operation`. The access is audited as a call by [caller]. When nobody offers the capability the
-     * answer is the one [handle] gives. An operation that carries a byte stream is `provider_unavailable` after the
-     * policy, as in [handle]: the request has no stream to forward, so nothing is sent.
+     * answer is `provider_unavailable`, or `incompatible_version` when it is offered only at versions that cannot
+     * serve the request. An operation that carries a byte stream is `provider_unavailable` after the policy, as in
+     * [handle]: the request has no stream to forward, so nothing is sent.
+     *
+     * A forwarded call has a deadline, the node's call timeout: when the peer has not answered by then the answer is
+     * `timeout`, audited like any other failure, so a provider that never answers cannot hold the caller (and
+     * whatever the transport keeps open for it) indefinitely. Requests served by [handle] get no deadline here.
      *
      * [target] narrows the choice like in [call]: a bridge that already knows which peer the external party means
      * (for example the relay of `:kora-wear-protocol`) passes [Target.Peer] or [Target.Local].
@@ -243,7 +256,7 @@ public class KoraNode(
                     ?: throw unknownMember("operation", request.operation)
                 authorize(caller, spec.scope)
                 if (spec.stream != StreamDirection.NONE) throw streamOnly(request.operation)
-                when (val response = send(destination, request)) {
+                when (val response = sendWithinCallTimeout(destination, request)) {
                     is KoraResponse.Failure -> throw KoraException(response.error)
                     is KoraResponse.Success -> response.payload
                 }
@@ -310,21 +323,24 @@ public class KoraNode(
     /**
      * Calls [spec] on a provider chosen by [target] and returns its typed result.
      *
+     * The provider is asked for the version the operation exists since ([OperationSpec.since]), not for the version
+     * of the capability this app was built against: an operation that exists since 1.0 is served by a provider at
+     * 1.0 even when the capability is at 1.1 here, and the request carries that version.
+     *
      * Throws [KoraException] with `provider_unavailable` when nobody offers the capability, `incompatible_version`
-     * when providers exist but none implements a version compatible with [spec], `timeout` after the configured
-     * call timeout, and any error the provider answered with. An operation that carries a byte stream is called with
-     * [callSending] or [callReceiving]; passing one here throws `IllegalArgumentException`.
+     * when providers exist but none is at a version that has the operation (same major, minor at least
+     * [OperationSpec.since]), `timeout` after the configured call timeout, and any error the provider answered with.
+     * An operation that carries a byte stream is called with [callSending] or [callReceiving]; passing one here
+     * throws `IllegalArgumentException`.
+     *
+     * A first call right after start-up can find no provider yet (discovery has not reported the peers); call
+     * [awaitProvider] first to wait for one instead of failing with `provider_unavailable`.
      */
     public suspend fun <I, O> call(spec: OperationSpec<I, O>, input: I, target: Target = Target.Any): O {
         requireCalledWith(spec, StreamDirection.NONE)
-        val destination = route(spec.capabilityId, spec.capabilityVersion, target)
+        val destination = route(spec.capabilityId, spec.since, target)
         val request = envelope(spec, input)
-        val response = try {
-            withTimeout(callTimeout) { send(destination, request) }
-        } catch (e: TimeoutCancellationException) {
-            currentCoroutineContext().ensureActive() // a timeout of an enclosing scope is not ours to translate
-            throw KoraException(KoraError(ErrorCode.TIMEOUT, "'${spec.name}' did not answer within $callTimeout"), e)
-        }
+        val response = sendWithinCallTimeout(destination, request)
         return result(spec, request, response)
     }
 
@@ -355,7 +371,7 @@ public class KoraNode(
     ): O =
         try {
             requireCalledWith(spec, StreamDirection.UPLOAD)
-            val destination = route(spec.capabilityId, spec.capabilityVersion, target)
+            val destination = route(spec.capabilityId, spec.since, target)
             val request = envelope(spec, input)
             val response = when (destination) {
                 Destination.Local -> handleSending(Caller(CallerKind.SELF, nodeId), request, bytes)
@@ -380,7 +396,7 @@ public class KoraNode(
      */
     public suspend fun <I, O> callReceiving(spec: OperationSpec<I, O>, input: I, target: Target = Target.Any): WithBytes<O> {
         requireCalledWith(spec, StreamDirection.DOWNLOAD)
-        val destination = route(spec.capabilityId, spec.capabilityVersion, target)
+        val destination = route(spec.capabilityId, spec.since, target)
         val request = envelope(spec, input)
         val answer = when (destination) {
             Destination.Local -> handleReceiving(Caller(CallerKind.SELF, nodeId), request)
@@ -404,10 +420,12 @@ public class KoraNode(
      * Events of [spec] from the provider chosen by [target]. The flow is cold: the provider is chosen and the
      * subscription opened when collection starts, and failures (no provider, refusal, transport error) are thrown
      * as [KoraException] at that point. Cancelling the collector ends the subscription.
+     *
+     * Like [call], the subscription asks the provider for the version the event exists since ([EventSpec.since]).
      */
     public fun <E> events(spec: EventSpec<E>, target: Target = Target.Any): Flow<E> = flow {
-        val destination = route(spec.capabilityId, spec.capabilityVersion, target)
-        val request = SubscribeRequest(nextId("sub"), spec.capabilityId.value, spec.capabilityVersion, spec.name)
+        val destination = route(spec.capabilityId, spec.since, target)
+        val request = SubscribeRequest(nextId("sub"), spec.capabilityId.value, spec.since, spec.name)
         val incoming = when (destination) {
             Destination.Local -> subscribe(Caller(CallerKind.SELF, nodeId), request)
             is Destination.Remote -> transport.subscribe(destination.peer, request)
@@ -431,21 +449,66 @@ public class KoraNode(
     /** The peers currently reachable, as advertised by the [PeerDirectory]; this node itself is never listed. */
     public val peers: StateFlow<List<PeerInfo>> get() = peerDirectory.peers
 
-    /** True when this node or a peer currently provides a version of [capability] compatible with it. */
+    /**
+     * True when this node or a peer currently provides a version of [capability] compatible with it, that is, one
+     * that has **every** member of [capability]. To gate a single operation or event, ask for that member instead:
+     * a provider at an older minor still has the members that exist since its version.
+     */
     public fun isAvailable(capability: Capability): Boolean = providers(capability).isNotEmpty()
+
+    /**
+     * True when this node or a peer currently provides [member]: a version of its capability with the same major and
+     * a minor of at least [MemberSpec.since]. When this is true, `call` or `events` with [member] finds a provider.
+     */
+    public fun isAvailable(member: MemberSpec): Boolean = providers(member).isNotEmpty()
 
     /**
      * Emits whether [capability] is available now and again each time that changes (a provider registers or a peer
      * appears, disappears or changes what it advertises). Meant for capability-gated UI, e.g. `collectAsState`
      * with `isAvailable(capability)` as the initial value.
      */
-    public fun availability(capability: Capability): Flow<Boolean> =
-        combine(localProviders, peerDirectory.peers) { local, peers -> offering(capability, local, peers).isNotEmpty() }
-            .distinctUntilChanged()
+    public fun availability(capability: Capability): Flow<Boolean> = availability(capability.id, capability.version)
 
-    /** Node ids that currently provide a compatible version of [capability]: this node first, then peers. */
+    /** Like [availability] of a capability, for one operation or event: emits whether [member] is available. */
+    public fun availability(member: MemberSpec): Flow<Boolean> = availability(member.capabilityId, member.since)
+
+    /**
+     * Waits until [target] provides a version of [capability] compatible with it, one that has every member of it,
+     * for at most [timeout]: with [Target.Any] this node or any peer, with [Target.Local] only this node, with
+     * [Target.Peer] only that peer (so a node that also provides [capability] itself can still wait for the peer it
+     * will call). Returns true as soon as it does (at once when it already does), false when it did not in time; a
+     * [timeout] of zero or less only checks.
+     *
+     * Use it before a first [call] or [events] after start-up, while discovery is still finding the peers, with the
+     * same target as the call. It does not start discovery: a directory that discovers on demand (the watch's remote
+     * directory) needs its refresh first. To wait for a provider of one operation or event, which a provider at an
+     * older minor can have, wait for that member instead.
+     */
+    public suspend fun awaitProvider(capability: Capability, timeout: Duration, target: Target = Target.Any): Boolean =
+        awaitProvider(capability.id, capability.version, timeout, target)
+
+    /**
+     * Like [awaitProvider] of a capability, for one operation or event: waits until [target] provides [member] (same
+     * major, minor of at least [MemberSpec.since]), so `call` or `events` with [member] and the same target finds a
+     * provider.
+     */
+    public suspend fun awaitProvider(member: MemberSpec, timeout: Duration, target: Target = Target.Any): Boolean =
+        awaitProvider(member.capabilityId, member.since, timeout, target)
+
+    /**
+     * Node ids that currently provide a compatible version of [capability], one that has every member of it: this
+     * node first, then peers.
+     */
     public fun providers(capability: Capability): List<String> =
-        offering(capability, localProviders.value, peerDirectory.peers.value)
+        offering(capability.id, capability.version, localProviders.value, peerDirectory.peers.value)
+
+    /**
+     * Node ids that currently provide [member] (same major, minor of at least [MemberSpec.since]): this node first,
+     * then peers. A provider at an older minor than the capability this app was built against is listed for the
+     * members it has.
+     */
+    public fun providers(member: MemberSpec): List<String> =
+        offering(member.capabilityId, member.since, localProviders.value, peerDirectory.peers.value)
 
     // ---- Internals -----------------------------------------------------------------------------------------
 
@@ -461,18 +524,42 @@ public class KoraNode(
 
     private fun otherPeers(peers: List<PeerInfo>): List<PeerInfo> = peers.filter { it.nodeId != nodeId }
 
+    private fun availability(id: CapabilityId, version: CapabilityVersion): Flow<Boolean> =
+        combine(localProviders, peerDirectory.peers) { local, peers -> offering(id, version, local, peers).isNotEmpty() }
+            .distinctUntilChanged()
+
+    private suspend fun awaitProvider(
+        id: CapabilityId,
+        version: CapabilityVersion,
+        timeout: Duration,
+        target: Target,
+    ): Boolean {
+        fun offered(providers: List<String>) = when (target) {
+            Target.Any -> providers.isNotEmpty()
+            Target.Local -> nodeId in providers
+            is Target.Peer -> target.nodeId != nodeId && target.nodeId in providers
+        }
+        if (offered(offering(id, version, localProviders.value, peerDirectory.peers.value))) return true
+        return withTimeoutOrNull(timeout) {
+            combine(localProviders, peerDirectory.peers) { local, peers -> offered(offering(id, version, local, peers)) }
+                .first { it }
+        } ?: false
+    }
+
+    /** Who can serve a request for [version] of [id]: the version of a capability, or the one a member exists since. */
     private fun offering(
-        capability: Capability,
+        id: CapabilityId,
+        version: CapabilityVersion,
         local: Map<ProviderKey, CapabilityProvider>,
         peers: List<PeerInfo>,
     ): List<String> {
-        val provided = local[ProviderKey(capability.id.value, capability.version.major)]?.capability?.version
-        val self = if (provided?.isCompatibleWith(capability.version) == true) {
+        val provided = local[ProviderKey(id.value, version.major)]?.capability?.version
+        val self = if (provided?.isCompatibleWith(version) == true) {
             listOf(nodeId)
         } else {
             emptyList()
         }
-        return self + otherPeers(peers).filter { it.offers(capability.id, capability.version) }.map { it.nodeId }
+        return self + otherPeers(peers).filter { it.offers(id, version) }.map { it.nodeId }
     }
 
     private fun route(id: CapabilityId, version: CapabilityVersion, target: Target): Destination {
@@ -511,6 +598,18 @@ public class KoraNode(
         }
     }
 
+    /** [send] limited to [callTimeout]: a destination that has not answered by then fails with `timeout`. */
+    private suspend fun sendWithinCallTimeout(destination: Destination, request: KoraRequest): KoraResponse =
+        try {
+            withTimeout(callTimeout) { send(destination, request) }
+        } catch (e: TimeoutCancellationException) {
+            currentCoroutineContext().ensureActive() // a timeout of an enclosing scope is not ours to translate
+            throw KoraException(
+                KoraError(ErrorCode.TIMEOUT, "'${request.operation}' did not answer within $callTimeout"),
+                e,
+            )
+        }
+
     private suspend fun send(destination: Destination, request: KoraRequest): KoraResponse = when (destination) {
         Destination.Local -> handle(Caller(CallerKind.SELF, nodeId), request)
         is Destination.Remote -> remote { transport.call(destination.peer, request) }
@@ -534,11 +633,11 @@ public class KoraNode(
             KoraError(ErrorCode.PROVIDER_UNAVAILABLE, "The transport to '${peer.nodeId}' carries no byte streams"),
         )
 
-    /** The request envelope of an outbound call of [spec]. */
+    /** The request envelope of an outbound call of [spec], asking for the version it exists since. */
     private fun <I> envelope(spec: OperationSpec<I, *>, input: I): KoraRequest = KoraRequest(
         id = nextId("req"),
         capability = spec.capabilityId.value,
-        version = spec.capabilityVersion,
+        version = spec.since,
         operation = spec.name,
         payload = try {
             spec.encodeInput(codec, input)
@@ -613,7 +712,9 @@ public class KoraNode(
 
     /**
      * Runs [block] and records one audit entry for it. Failures are rethrown as [KoraException]; anything that
-     * is not already one becomes `internal`. Cancellation is rethrown untouched and not audited.
+     * is not already one becomes `internal`, except a timeout raised inside [block] (a handler's own `withTimeout`)
+     * while the calling coroutine is still active, which becomes `timeout`. Cancellation of the calling coroutine,
+     * including a timeout of a scope around it, is rethrown untouched and not audited.
      */
     private suspend fun <T> audited(
         caller: Caller,
@@ -625,6 +726,11 @@ public class KoraNode(
         val start = clock()
         val result = try {
             block()
+        } catch (e: TimeoutCancellationException) {
+            currentCoroutineContext().ensureActive() // the caller's own cancellation: not a failure of the block
+            val failure = KoraException(KoraError(ErrorCode.TIMEOUT, "'$member' timed out"), e)
+            record(start, caller, kind, capability, member, AuditOutcome.Failed(failure.error.code))
+            throw failure
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

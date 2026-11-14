@@ -119,7 +119,10 @@ public object KoraAndroid {
      *   everyone else. To open the app to external callers pass `DefaultCallerPolicy(externalAccess)` with an
      *   `ExternalAccess` backed by the app's settings (master switch off by default, explicit per-caller grants).
      * @param audit receives one entry per access served.
-     * @param callTimeout limit for one outbound call, including binding to a peer that is not running yet.
+     * @param callTimeout limit for one outbound call, including binding to a peer that is not running yet. It also
+     *   limits a call this node forwards to a peer for someone else (the watch through the wear relay, an agent
+     *   through a gate): an app that relays slow operations needs a `callTimeout` that covers them here too, not
+     *   only on the device that calls.
      * @param connectTimeout how long to wait for a peer to accept the binding.
      * @param idleTimeout a connection to a peer with no call and no subscription in flight is unbound after this.
      * @param streamIdleTimeout limit for a byte stream that stalls, in either direction and on either side: a stream
