@@ -1,0 +1,131 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "eus.bihurri.kora",
+    "module": "kora-wear",
+    "version": "1.4.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "9.8.1"
+    }
+  },
+  "variants": [
+    {
+      "name": "releaseVariantReleaseApiPublication",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-api"
+      },
+      "dependencies": [
+        {
+          "group": "eus.bihurri.kora",
+          "module": "kora-android",
+          "version": {
+            "requires": "1.4.0"
+          }
+        },
+        {
+          "group": "eus.bihurri.kora",
+          "module": "kora-wear-protocol",
+          "version": {
+            "requires": "1.4.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.4.21"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "kora-wear-1.4.0.aar",
+          "url": "kora-wear-1.4.0.aar",
+          "size": 38334,
+          "sha512": "94eae60c05e9db0687bf1884192ffdc941f694b1edb5ecf1a1790205c087f11af3eabccc78b99ebd967ef796dd4830fd3f4d007961f8fe1301414feb789d26f3",
+          "sha256": "5a08686d86fa80c6c5c153c40b6516e52b5ea2ae97e3366a95b8c846730884bf",
+          "sha1": "ff9d8d7c38fcc3ffd57824943b2f7999ef95590a",
+          "md5": "350e55ec73186ab65deecff57794f250"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseRuntimePublication",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-runtime"
+      },
+      "dependencies": [
+        {
+          "group": "com.google.android.gms",
+          "module": "play-services-wearable",
+          "version": {
+            "requires": "20.0.1"
+          }
+        },
+        {
+          "group": "eus.bihurri.kora",
+          "module": "kora-android",
+          "version": {
+            "requires": "1.4.0"
+          }
+        },
+        {
+          "group": "eus.bihurri.kora",
+          "module": "kora-wear-protocol",
+          "version": {
+            "requires": "1.4.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.4.21"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "kora-wear-1.4.0.aar",
+          "url": "kora-wear-1.4.0.aar",
+          "size": 38334,
+          "sha512": "94eae60c05e9db0687bf1884192ffdc941f694b1edb5ecf1a1790205c087f11af3eabccc78b99ebd967ef796dd4830fd3f4d007961f8fe1301414feb789d26f3",
+          "sha256": "5a08686d86fa80c6c5c153c40b6516e52b5ea2ae97e3366a95b8c846730884bf",
+          "sha1": "ff9d8d7c38fcc3ffd57824943b2f7999ef95590a",
+          "md5": "350e55ec73186ab65deecff57794f250"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseSourcePublication",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "kora-wear-1.4.0-sources.jar",
+          "url": "kora-wear-1.4.0-sources.jar",
+          "size": 7301,
+          "sha512": "90b14715343f8c9cdaeb19d6459406a14d6fbcb12d9d7cba69eaddb5d8cddfa726ae0670f5e4d3dc50524e2a697d68e1ae3d66c3dc096aaa6f7c1f9fd4eab8b9",
+          "sha256": "ae898c25d19cc464e1344829c60235c2ec353af8dea7d39da4904998d10077d4",
+          "sha1": "80680298a79a5f32a161e9b46257dce61cd43443",
+          "md5": "d3351db3ff8f0884f663c95b58879ab5"
+        }
+      ]
+    }
+  ]
+}

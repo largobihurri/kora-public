@@ -1,0 +1,110 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "eus.bihurri.kora",
+    "module": "kora-tailnet",
+    "version": "1.4.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "9.8.1"
+    }
+  },
+  "variants": [
+    {
+      "name": "releaseVariantReleaseApiPublication",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-api"
+      },
+      "dependencies": [
+        {
+          "group": "eus.bihurri.kora",
+          "module": "kora-mcp-http",
+          "version": {
+            "requires": "1.4.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.4.21"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "kora-tailnet-1.4.0.aar",
+          "url": "kora-tailnet-1.4.0.aar",
+          "size": 108169,
+          "sha512": "f7687ade34b7bdfb51e803c2811ef716c036b0818cfb8232b13d6d5c3953b8b984beb23dd2fc43da0b31e808a7cb51f6e5b4d935c459d80baad07a89c1200bf3",
+          "sha256": "bd5335f687e188664d8789d46ded690d448bf6310b336d59785f398a9b0607ca",
+          "sha1": "1ead37bbbd8de286fe92044908919f6f101187ca",
+          "md5": "916651b8f9cc5d86de02f4b0fb6e6f4d"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseRuntimePublication",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-runtime"
+      },
+      "dependencies": [
+        {
+          "group": "eus.bihurri.kora",
+          "module": "kora-mcp-http",
+          "version": {
+            "requires": "1.4.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.4.21"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "kora-tailnet-1.4.0.aar",
+          "url": "kora-tailnet-1.4.0.aar",
+          "size": 108169,
+          "sha512": "f7687ade34b7bdfb51e803c2811ef716c036b0818cfb8232b13d6d5c3953b8b984beb23dd2fc43da0b31e808a7cb51f6e5b4d935c459d80baad07a89c1200bf3",
+          "sha256": "bd5335f687e188664d8789d46ded690d448bf6310b336d59785f398a9b0607ca",
+          "sha1": "1ead37bbbd8de286fe92044908919f6f101187ca",
+          "md5": "916651b8f9cc5d86de02f4b0fb6e6f4d"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseSourcePublication",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "kora-tailnet-1.4.0-sources.jar",
+          "url": "kora-tailnet-1.4.0-sources.jar",
+          "size": 26037,
+          "sha512": "d68d8058e6b6d8c9dd6ac5a8a5a799a3114f73b9b23a4ef423ef7201890cb6a034cf778c269c655c1f87281f64a5c8ce7a034bed33ed092f6916dad2ab531b01",
+          "sha256": "f13300f47d77a98275b9519f7c583fa0f3228140a522440d6c40a59a69ffb1a3",
+          "sha1": "c633799da4999b5361c581125a23ddec13957334",
+          "md5": "a7b675ff256d964e522fa3bb53f89762"
+        }
+      ]
+    }
+  ]
+}

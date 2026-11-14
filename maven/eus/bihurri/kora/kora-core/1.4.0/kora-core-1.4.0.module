@@ -1,0 +1,130 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "eus.bihurri.kora",
+    "module": "kora-core",
+    "version": "1.4.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "9.8.1"
+    }
+  },
+  "variants": [
+    {
+      "name": "apiElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.jvm.version": 17,
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "eus.bihurri.kora",
+          "module": "kora-contract",
+          "version": {
+            "requires": "1.4.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.11.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.4.21"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "kora-core-1.4.0.jar",
+          "url": "kora-core-1.4.0.jar",
+          "size": 254069,
+          "sha512": "adb1b5fe63cf6f90d1bfe9566c40329e38e05ac62b3acf19f2974ef9e4f52fa42dca55cdfd6687723195a9a7f5a39e2cf00278f4c9cdaf42da96a4ef26f1dfef",
+          "sha256": "6a49547ca9549a1028e87f4fc37676d0b106d612514b6d0ffb5dea3ffd522794",
+          "sha1": "b05051116c6d8ddb93e8cb25c3f36d59eb6debf6",
+          "md5": "11fb43e16ab7d0c688cb67120d9f56a8"
+        }
+      ]
+    },
+    {
+      "name": "runtimeElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.jvm.version": 17,
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "eus.bihurri.kora",
+          "module": "kora-contract",
+          "version": {
+            "requires": "1.4.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.11.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.4.21"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "kora-core-1.4.0.jar",
+          "url": "kora-core-1.4.0.jar",
+          "size": 254069,
+          "sha512": "adb1b5fe63cf6f90d1bfe9566c40329e38e05ac62b3acf19f2974ef9e4f52fa42dca55cdfd6687723195a9a7f5a39e2cf00278f4c9cdaf42da96a4ef26f1dfef",
+          "sha256": "6a49547ca9549a1028e87f4fc37676d0b106d612514b6d0ffb5dea3ffd522794",
+          "sha1": "b05051116c6d8ddb93e8cb25c3f36d59eb6debf6",
+          "md5": "11fb43e16ab7d0c688cb67120d9f56a8"
+        }
+      ]
+    },
+    {
+      "name": "sourcesElements",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "kora-core-1.4.0-sources.jar",
+          "url": "kora-core-1.4.0-sources.jar",
+          "size": 34400,
+          "sha512": "6457d93245ff86c53a35c90e1914048515bb3966ca9380610a7f79707e8746e2fddd2ce0915dc82f44fab35e7eb57fbc3f7c26ffd9a659668d32c873f320769a",
+          "sha256": "16f0687bbf86423a2e1d4c37898c67b2b6cde572d3fd335efe5b1fbcd0dc48f1",
+          "sha1": "17568489a5e1afcc2d2aa14a3e9f1b0678385494",
+          "md5": "c03e6b45f5c266535b509d5d37678670"
+        }
+      ]
+    }
+  ]
+}
